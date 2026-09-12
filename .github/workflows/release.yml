@@ -1,0 +1,83 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  cli:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+            asset: artifacts-linux-x86_64
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            asset: artifacts-linux-arm64
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            asset: artifacts-darwin-x86_64
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            asset: artifacts-darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - run: cp target/${{ matrix.target }}/release/artifacts ../${{ matrix.asset }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset }}
+
+  server:
+    runs-on: ubuntu-latest
+    container: hexpm/elixir:1.20.4-erlang-28.5.0.6-debian-trixie-20260824-slim
+    defaults:
+      run:
+        working-directory: server
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y build-essential git
+      - run: mix local.hex --force && mix local.rebar --force
+      - run: mix deps.get --only prod
+      - run: mix compile
+      - run: mix assets.deploy
+      - run: mix release
+      - run: tar -czf ../artifacts-${GITHUB_REF_NAME}-linux-x86_64.tar.gz -C _build/prod/rel/artifacts .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
