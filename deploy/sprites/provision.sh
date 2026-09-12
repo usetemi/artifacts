@@ -20,7 +20,17 @@ here=$(cd "$(dirname "$0")" && pwd)
 
 sprite create --skip-console "$name"
 
-sprite exec -s "$name" --file "$tarball:/home/sprite/release.tar.gz" \
+# The public host must be known before the app boots: sockets from the
+# chrome and the runtime are only accepted from that origin.
+sprite url update -s "$name" --auth public
+public_host=$(sprite url -s "$name" | grep -oE 'https://[^ /]+' | head -1 | sed 's#https://##')
+[ -n "$public_host" ] || {
+    echo "could not read the Sprite's public URL" >&2
+    exit 1
+}
+
+sprite exec -s "$name" --env "PHX_HOST=$public_host" \
+    --file "$tarball:/home/sprite/release.tar.gz" \
     --file "$here/start.sh:/home/sprite/start.sh" -- bash -s <<'EOF'
 set -euo pipefail
 sudo apt-get update -qq
@@ -41,7 +51,7 @@ secret=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
 cat >/home/sprite/artifacts.env <<ENV
 DATABASE_URL=ecto://postgres@localhost/artifacts
 SECRET_KEY_BASE=$secret
-PHX_HOST=$(sprite-env url 2>/dev/null | sed -E 's#https?://##; s#/$##' || echo localhost)
+PHX_HOST=$PHX_HOST
 PORT=4000
 ENV
 
@@ -51,6 +61,5 @@ sprite-env services create app \
     --cmd /home/sprite/start.sh --dir /home/sprite --needs postgres --http-port 4000
 EOF
 
-sprite url update -s "$name" --auth public
 sprite checkpoint create -s "$name" --comment "artifacts host provisioned"
-sprite url -s "$name"
+echo "https://$public_host"

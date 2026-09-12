@@ -20,8 +20,9 @@ if System.get_env("PHX_SERVER") do
   config :artifacts, ArtifactsWeb.Endpoint, server: true
 end
 
-config :artifacts, ArtifactsWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+port = String.to_integer(System.get_env("PORT", "4000"))
+
+config :artifacts, ArtifactsWeb.Endpoint, http: [port: port]
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
@@ -71,13 +72,16 @@ if config_env() == :prod do
   host = System.get_env("PHX_HOST") || "example.com"
 
   # The public URL is whatever sits in front of the host: a TLS-terminating
-  # proxy (https, the default) or nothing at all (a local Compose on http).
+  # proxy on 443 (https, the default) or nothing at all (http), in which
+  # case the public port is the listening port. PHX_URL_PORT overrides both.
   scheme = System.get_env("PHX_SCHEME") || "https"
 
   url_port =
-    String.to_integer(
-      System.get_env("PHX_URL_PORT") || if(scheme == "https", do: "443", else: "80")
-    )
+    case System.get_env("PHX_URL_PORT") do
+      nil when scheme == "https" -> 443
+      nil -> port
+      given -> String.to_integer(given)
+    end
 
   config :artifacts, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 

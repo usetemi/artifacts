@@ -10,7 +10,7 @@ environment variables:
 | `SECRET_KEY_BASE` | 64+ random bytes, e.g. `openssl rand -base64 48` |
 | `PHX_HOST` | the public host name, used to build artifact URLs and to check WebSocket origins |
 | `PHX_SCHEME` | `https` (default) or `http` |
-| `PHX_URL_PORT` | only when the public port is not 443 / 80 |
+| `PHX_URL_PORT` | only when the public port is neither 443 (https) nor the listening port (http) |
 | `PORT` | the port the host listens on (default 4000) |
 
 ## Docker Compose

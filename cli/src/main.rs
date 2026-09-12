@@ -211,7 +211,7 @@ fn run(host: &Host, command: Command) -> Result<Outcome> {
 /// the agent is asking "what does the viewer do next", not "what has
 /// anyone ever submitted".
 fn wait(host: &Host, id: &str, since: Option<u64>, timeout: u64) -> Result<Outcome> {
-    let mut cursor = match since {
+    let cursor = match since {
         Some(cursor) => cursor,
         None => {
             let existing = host.get(&format!("/api/artifacts/{id}/submissions"))?;
@@ -241,13 +241,8 @@ fn wait(host: &Host, id: &str, since: Option<u64>, timeout: u64) -> Result<Outco
         let list = body
             .as_array()
             .ok_or_else(|| anyhow!("host returned a non-list"))?;
-        match list.first() {
-            Some(first) => return print(first),
-            None => {
-                if let Some(last) = list.last().and_then(|s| s["id"].as_u64()) {
-                    cursor = last;
-                }
-            }
+        if let Some(first) = list.first() {
+            return print(first);
         }
     }
 }

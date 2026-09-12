@@ -24,9 +24,9 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?generate one with `openssl rand -base64 48`}
       PHX_HOST: ${PHX_HOST:-localhost}
       PHX_SCHEME: ${PHX_SCHEME:-http}
-      PORT: "4000"
+      PORT: "${PORT:-4000}"
     ports:
-      - "${PORT:-4000}:4000"
+      - "${PORT:-4000}:${PORT:-4000}"
     depends_on:
       postgres:
         condition: service_healthy

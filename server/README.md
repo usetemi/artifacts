@@ -8,7 +8,7 @@ docker compose -f ../deploy/docker-compose.yml up -d postgres   # or any Postgre
 mix setup
 mix phx.server          # http://localhost:4000
 mix test                # ExUnit
-node --test assets/test # the browser runtime's state rules, on the shared fixture
+node --test 'assets/test/**/*.test.mjs'   # the browser runtime's state rules, on the shared fixture
 ```
 
 `config/dev.exs` expects Postgres on `localhost:5432` as `postgres` /
