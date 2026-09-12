@@ -1,7 +1,8 @@
 //! The agent-facing CLI. Every command is one HTTP call to the host (or a
 //! loop of them for `wait`) and prints one JSON document, so an agent can
-//! read the result without parsing prose. `get` is the exception: it
-//! prints raw HTML for redirection into a file.
+//! read the result without parsing prose. Two exceptions print for
+//! redirection into a file: `get` prints raw HTML and `history` streams
+//! one JSON document per line.
 
 use std::io::Read;
 use std::process::ExitCode;
@@ -87,8 +88,10 @@ enum Command {
         #[arg(long, default_value_t = 90)]
         timeout: u64,
     },
-    /// Delete an artifact and everything under it
-    Delete { id: String },
+    /// Hide an artifact and close it to writes; nothing is deleted
+    Archive { id: String },
+    /// Print an artifact's full history as NDJSON: every version, edit, and submission
+    History { id: String },
 }
 
 #[derive(Subcommand)]
@@ -200,9 +203,17 @@ fn run(host: &Host, command: Command) -> Result<Outcome> {
             print(&host.get(&format!("/api/artifacts/{id}/submissions?since={since}"))?)
         }
         Command::Wait { id, since, timeout } => wait(host, &id, since, timeout),
-        Command::Delete { id } => {
-            host.delete(&format!("/api/artifacts/{id}"))?;
-            print(&json!({"deleted": id}))
+        Command::Archive { id } => {
+            print(&host.post(&format!("/api/artifacts/{id}/archive"), &json!({}))?)
+        }
+        Command::History { id } => {
+            let mut response = host.request(
+                host.client
+                    .get(host.url(&format!("/api/artifacts/{id}/history"))),
+            )?;
+            std::io::copy(&mut response, &mut std::io::stdout())
+                .context("could not write history")?;
+            Ok(Outcome::Printed)
         }
     }
 }
@@ -275,10 +286,6 @@ impl Host {
 
     fn put(&self, path: &str, body: &Value) -> Result<Value> {
         self.json(self.client.put(self.url(path)).json(body))
-    }
-
-    fn delete(&self, path: &str) -> Result<()> {
-        self.request(self.client.delete(self.url(path))).map(|_| ())
     }
 
     fn json(&self, request: reqwest::blocking::RequestBuilder) -> Result<Value> {

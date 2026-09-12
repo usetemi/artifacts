@@ -30,7 +30,11 @@ defmodule ArtifactsWeb.PageControllerTest do
              ~s(<script src="/assets/js/runtime.js" data-artifact-id="id1" data-version="3"></script><p>x</p>)
   end
 
-  test "unknown pages are 404", %{conn: conn} do
+  test "unknown and archived pages are 404", %{conn: conn} do
     assert text_response(get(conn, ~p"/a/missing/page"), 404)
+
+    {:ok, artifact} = Store.create(%{title: "T", html: "<p>x</p>"})
+    {:ok, _} = Store.archive(artifact.id)
+    assert text_response(get(conn, ~p"/a/#{artifact.id}/page"), 404)
   end
 end

@@ -16,26 +16,23 @@ defmodule ArtifactsWeb.ArtifactChannel do
   alias ArtifactsWeb.Presence
 
   @max_viewer_id_bytes 64
-  @max_name_bytes 80
 
   @impl true
   def join("artifact:" <> id, params, socket) do
-    with {:ok, artifact} <- Store.get(id),
+    with {:ok, artifact} <- Store.get_open(id),
          {:ok, viewer_id} <- viewer_id(params) do
       send(self(), :after_join)
 
       socket =
-        assign(socket,
-          artifact_id: id,
-          viewer_id: viewer_id,
-          name: name(params),
-          by: Store.viewer(viewer_id)
-        )
+        assign(socket, artifact_id: id, viewer_id: viewer_id, by: Store.viewer(viewer_id))
 
       {:ok, %{version: artifact.current_version, state: Store.leaves(id)}, socket}
     else
       {:error, :not_found} ->
         {:error, %{reason: "not_found"}}
+
+      {:error, :archived} ->
+        {:error, %{reason: "archived"}}
 
       {:error, :viewer_id} ->
         {:error, %{reason: "viewer_id must be a string of at most 64 bytes"}}
@@ -44,9 +41,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
 
   @impl true
   def handle_info(:after_join, socket) do
-    {:ok, _ref} =
-      Presence.track(socket, socket.assigns.viewer_id, %{name: socket.assigns.name, meta: %{}})
-
+    {:ok, _ref} = Presence.track(socket, socket.assigns.viewer_id, %{meta: %{}})
     push(socket, "presence_state", Presence.list(socket))
     {:noreply, socket}
   end
@@ -70,9 +65,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
   def handle_in("state:ops", %{"ops" => ops}, socket) do
     case Store.apply_ops(socket.assigns.artifact_id, ops, socket.assigns.by) do
       {:ok, _ops} -> {:reply, :ok, socket}
-      {:error, :not_found} -> {:reply, {:error, %{reason: "not_found"}}, socket}
-      {:error, :quota} -> {:reply, {:error, %{reason: "quota"}}, socket}
-      {:error, reason} when is_binary(reason) -> {:reply, {:error, %{reason: reason}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
     end
   end
 
@@ -89,7 +82,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
     broadcast_from!(socket, "broadcast", %{
       topic: topic,
       data: data,
-      from: %{viewer: %{id: socket.assigns.viewer_id, name: socket.assigns.name}}
+      from: %{viewer: %{id: socket.assigns.viewer_id}}
     })
 
     {:noreply, socket}
@@ -98,8 +91,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
   def handle_in("submit", params, socket) do
     case Store.submit(socket.assigns.artifact_id, params["payload"], socket.assigns.viewer_id) do
       {:ok, submission} -> {:reply, {:ok, %{id: submission.id}}, socket}
-      {:error, :not_found} -> {:reply, {:error, %{reason: "not_found"}}, socket}
-      {:error, :quota} -> {:reply, {:error, %{reason: "quota"}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
     end
   end
 
@@ -108,9 +100,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
 
     case Store.publish(socket.assigns.artifact_id, html, opts) do
       {:ok, number} -> {:reply, {:ok, %{version: number}}, socket}
-      {:error, :conflict} -> {:reply, {:error, %{reason: "conflict"}}, socket}
-      {:error, :not_found} -> {:reply, {:error, %{reason: "not_found"}}, socket}
-      {:error, reason} when is_binary(reason) -> {:reply, {:error, %{reason: reason}}, socket}
+      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
     end
   end
 
@@ -123,9 +113,4 @@ defmodule ArtifactsWeb.ArtifactChannel do
   end
 
   defp viewer_id(_params), do: {:error, :viewer_id}
-
-  defp name(%{"name" => name})
-       when is_binary(name) and byte_size(name) <= @max_name_bytes and name != "", do: name
-
-  defp name(_params), do: nil
 end

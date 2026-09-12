@@ -33,6 +33,7 @@ defmodule ArtifactsWeb.API.ArtifactController do
     case Store.publish(id, html, opts) do
       {:ok, number} -> json(conn, %{id: id, version: number, url: page_url(id)})
       {:error, :not_found} -> Errors.not_found(conn)
+      {:error, :archived} -> Errors.archived(conn)
       {:error, :conflict} -> Errors.conflict(conn)
       {:error, reason} -> Errors.unprocessable(conn, reason)
     end
@@ -40,9 +41,9 @@ defmodule ArtifactsWeb.API.ArtifactController do
 
   def update(conn, _params), do: Errors.unprocessable(conn, "html is required")
 
-  def delete(conn, %{"id" => id}) do
-    case Store.delete(id) do
-      :ok -> send_resp(conn, :no_content, "")
+  def archive(conn, %{"id" => id}) do
+    case Store.archive(id) do
+      {:ok, artifact} -> json(conn, artifact_json(artifact))
       {:error, :not_found} -> Errors.not_found(conn)
     end
   end
@@ -82,6 +83,7 @@ defmodule ArtifactsWeb.API.ArtifactController do
       title: artifact.title,
       version: artifact.current_version,
       url: page_url(artifact.id),
+      archived_at: artifact.archived_at,
       inserted_at: artifact.inserted_at,
       updated_at: artifact.updated_at
     }

@@ -41,7 +41,8 @@ defmodule ArtifactsWeb.Router do
     post "/artifacts", ArtifactController, :create
     get "/artifacts/:id", ArtifactController, :show
     put "/artifacts/:id", ArtifactController, :update
-    delete "/artifacts/:id", ArtifactController, :delete
+    post "/artifacts/:id/archive", ArtifactController, :archive
+    get "/artifacts/:id/history", HistoryController, :index
     get "/artifacts/:id/versions", ArtifactController, :versions
     get "/artifacts/:id/versions/:number", ArtifactController, :version
     get "/artifacts/:id/state", StateController, :show

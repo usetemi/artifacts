@@ -6,16 +6,22 @@ environment variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `DATABASE_URL` | `ecto://user:pass@host/db` |
+| `DATABASE_URL` | `ecto://user:pass@host/db`. Drop any `?sslmode=...` suffix a provider appends and use `DATABASE_SSL` instead. |
+| `DATABASE_SSL` | `true` when the database is reached over TLS (a hosted Postgres); the host then verifies the server's certificate against the OS trust store. Off by default. |
 | `SECRET_KEY_BASE` | 64+ random bytes, e.g. `openssl rand -base64 48` |
 | `PHX_HOST` | the public host name, used to build artifact URLs and to check WebSocket origins |
 | `PHX_SCHEME` | `https` (default) or `http` |
 | `PHX_URL_PORT` | only when the public port is neither 443 (https) nor the listening port (http) |
 | `PORT` | the port the host listens on (default 4000) |
 
+Nothing is ever deleted from the database: every version, every state
+edit, and every submission stays, and `artifacts archive` only hides a
+page. Size the database, and its backups, for a record that only grows.
+
 ## Docker Compose
 
-Also the local development database.
+For local development, the test suite's database, and self-hosting on
+one machine.
 
 ```sh
 cd deploy
@@ -25,33 +31,44 @@ SECRET_KEY_BASE=$(openssl rand -base64 48) PHX_HOST=localhost PHX_SCHEME=http do
 The app image builds from `../server/Dockerfile`, runs migrations on
 boot, and listens on `localhost:4000`. Set `PHX_HOST`, `PHX_SCHEME`, and
 `PORT` for a real host name behind your proxy. Data lives in the
-`postgres` volume.
+`postgres` volume; back that volume up if the history matters to you.
 
-## Fly Sprites
+`docker compose up -d postgres` alone gives `mix test` and `mix
+phx.server` their database.
 
-A Sprite is a persistent Linux VM that sleeps when idle and wakes on the
-next request, with a filesystem that survives sleep. `sprites/provision.sh`
-turns a fresh Sprite into a host:
+## Fly Machines with Neon
 
-```sh
-deploy/sprites/provision.sh artifacts ./artifacts-<version>-linux-x86_64.tar.gz
-```
+One Fly Machine that stops when idle and starts on the next request,
+running the container image each release publishes to
+`ghcr.io/usetemi/artifacts`, against a Neon Postgres, which suspends
+when idle, keeps its data in object storage, and has a free tier.
+Neither side costs anything while nobody has a page open.
 
-It installs Postgres from apt, unpacks the release (which bundles its own
-Erlang runtime), registers two supervised services (`postgres`, then
-`app` on the Sprite's HTTP port), makes the URL public, and takes a
-checkpoint. The script prints the `https://<name>-<org>.sprites.app`
-URL; that is `ARTIFACTS_URL` for every agent.
+1. Create a Neon project and copy its **direct** connection string, not
+   the pooled one: the host keeps its own connection pool, and Neon
+   recommends the direct endpoint for that. Rewrite it as
+   `ecto://user:pass@host/db`, without the `?sslmode=...` suffix.
+2. Copy `fly/fly.toml`, set `app`, `PHX_HOST`, and `primary_region`,
+   then:
+
+   ```sh
+   fly apps create <app>
+   fly secrets set -a <app> DATABASE_URL='ecto://...' SECRET_KEY_BASE="$(openssl rand -base64 48)"
+   fly deploy --config fly.toml
+   ```
+
+   The release command runs migrations before the new Machine takes
+   traffic. `ARTIFACTS_URL` for every agent is `https://<app>.fly.dev`.
+3. To update, bump the image tag in `fly.toml` and deploy again.
 
 Behavior to expect:
 
-- The Sprite pauses after idle time and drops open connections. Pages
-  reconnect on their own and take a fresh state snapshot; the reconnect
-  is what wakes the Sprite (100 to 500 ms warm, 1 to 2 s cold).
-- Only one service can own the HTTP port, and it is the app.
-- `--auth public` means anyone with a URL can reach it, which matches
-  the no-auth model: artifact ids are the only secret.
-
-To update: upload a new tarball with `sprite exec --file`, unpack it
-over `/home/sprite/artifacts`, restart the `app` service, and take a
-new checkpoint.
+- The Machine stops a few minutes after the last request and drops open
+  connections. Pages reconnect on their own and take a fresh state
+  snapshot; the reconnect is what starts the Machine. Neon resumes on
+  the first query, which adds a moment to that first request.
+- An open tab holds a WebSocket and a running `wait` holds a request, so
+  either keeps the Machine, and with it the database, awake. Both
+  suspend only when nothing is connected.
+- The `fly.dev` URL is public. Artifact ids are the only secret, which
+  matches the no-auth model.

@@ -12,6 +12,7 @@ defmodule ArtifactsWeb.API.SubmissionController do
     case Store.submit(id, params["payload"], params["viewer_id"]) do
       {:ok, submission} -> conn |> put_status(:created) |> json(submission_json(submission))
       {:error, :not_found} -> Errors.not_found(conn)
+      {:error, :archived} -> Errors.archived(conn)
       {:error, :quota} -> Errors.quota(conn)
     end
   end

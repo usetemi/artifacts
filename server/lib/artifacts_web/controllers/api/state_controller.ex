@@ -23,6 +23,7 @@ defmodule ArtifactsWeb.API.StateController do
     case Store.apply_ops(id, ops, Store.agent()) do
       {:ok, applied} -> json(conn, %{applied: applied})
       {:error, :not_found} -> Errors.not_found(conn)
+      {:error, :archived} -> Errors.archived(conn)
       {:error, :quota} -> Errors.quota(conn)
       {:error, reason} -> Errors.unprocessable(conn, reason)
     end

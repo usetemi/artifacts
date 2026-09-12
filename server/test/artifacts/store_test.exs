@@ -59,19 +59,90 @@ defmodule Artifacts.StoreTest do
       assert Enum.map(Store.list(), & &1.id) == [first.id, second.id]
     end
 
-    test "delete cascades and reports missing ids" do
+    test "archive hides the artifact, refuses writes, and keeps every row" do
       artifact = create!()
 
       {:ok, _} =
         Store.apply_ops(artifact.id, [%{"op" => "set", "path" => "a", "value" => 1}], "agent")
 
-      {:ok, _} = Store.submit(artifact.id, nil, nil)
+      {:ok, submission} = Store.submit(artifact.id, nil, nil)
 
-      assert :ok = Store.delete(artifact.id)
-      assert {:error, :not_found} = Store.get(artifact.id)
-      assert Store.leaves(artifact.id) == %{}
-      assert Store.submissions(artifact.id) == []
-      assert {:error, :not_found} = Store.delete(artifact.id)
+      assert {:ok, %{archived_at: %DateTime{} = at}} = Store.archive(artifact.id)
+      assert {:ok, %{archived_at: ^at}} = Store.archive(artifact.id)
+      assert {:ok, %{archived_at: ^at}} = Store.get(artifact.id)
+      assert {:error, :archived} = Store.get_open(artifact.id)
+      assert Store.list() == []
+
+      assert {:error, :archived} =
+               Store.apply_ops(
+                 artifact.id,
+                 [%{"op" => "set", "path" => "b", "value" => 2}],
+                 "agent"
+               )
+
+      assert {:error, :archived} = Store.submit(artifact.id, nil, nil)
+      assert {:error, :archived} = Store.publish(artifact.id, "<p>2</p>")
+
+      assert Store.leaves(artifact.id) == %{"a" => 1}
+      assert [%{id: kept}] = Store.submissions(artifact.id)
+      assert kept == submission.id
+      assert {:ok, %{number: 1}} = Store.current_version(artifact.id)
+      assert {:error, :not_found} = Store.archive("missing")
+    end
+  end
+
+  describe "history" do
+    test "records every write in order, joined with what it describes" do
+      artifact = create!()
+
+      {:ok, _} =
+        Store.apply_ops(
+          artifact.id,
+          [
+            %{"op" => "set", "path" => "a.b", "value" => 1},
+            %{"op" => "set", "path" => "gone", "value" => nil}
+          ],
+          "viewer:v1"
+        )
+
+      {:ok, submission} = Store.submit(artifact.id, %{"ok" => true}, "v1")
+      {:ok, 2} = Store.publish(artifact.id, "<p>2</p>", by: "viewer:v1")
+      {:ok, _} = Store.archive(artifact.id)
+
+      events = Store.history(artifact.id)
+
+      assert Enum.map(events, &{&1.kind, &1.actor}) == [
+               {"version", "agent"},
+               {"state_op", "viewer:v1"},
+               {"state_op", "viewer:v1"},
+               {"submission", "viewer:v1"},
+               {"version", "viewer:v1"},
+               {"archive", "agent"}
+             ]
+
+      assert [
+               %{version: %{number: 1, html: @html, published_by: "agent"}},
+               %{op: %{"op" => "set", "path" => "a.b", "value" => 1}},
+               %{op: %{"op" => "delete", "path" => "gone"}},
+               %{
+                 submission: %{
+                   id: submitted,
+                   version: 1,
+                   viewer_id: "v1",
+                   state: %{"a" => %{"b" => 1}},
+                   payload: %{"ok" => true}
+                 }
+               },
+               %{version: %{number: 2, html: "<p>2</p>"}},
+               %{at: %DateTime{}}
+             ] = events
+
+      assert submitted == submission.id
+
+      [first | _] = events
+      assert [%{kind: "state_op"} | _] = Store.history(artifact.id, first.id)
+      assert Store.history(artifact.id, List.last(events).id) == []
+      assert Store.history("missing") == []
     end
   end
 

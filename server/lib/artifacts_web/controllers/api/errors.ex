@@ -8,6 +8,8 @@ defmodule ArtifactsWeb.API.Errors do
 
   def conflict(conn), do: conn |> put_status(:conflict) |> json(%{error: "conflict"})
 
+  def archived(conn), do: conn |> put_status(:conflict) |> json(%{error: "archived"})
+
   def quota(conn), do: conn |> put_status(:unprocessable_entity) |> json(%{error: "quota"})
 
   def unprocessable(conn, reason) do

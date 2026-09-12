@@ -13,7 +13,7 @@ defmodule ArtifactsWeb.ArtifactLive do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    case Store.get(id) do
+    case Store.get_open(id) do
       {:ok, artifact} ->
         if connected?(socket) do
           :ok = Phoenix.PubSub.subscribe(Artifacts.PubSub, Store.topic(id))
@@ -28,7 +28,7 @@ defmodule ArtifactsWeb.ArtifactLive do
            page_title: artifact.title
          )}
 
-      {:error, :not_found} ->
+      {:error, reason} when reason in [:not_found, :archived] ->
         raise ArtifactsWeb.NotFoundError
     end
   end
@@ -83,8 +83,8 @@ defmodule ArtifactsWeb.ArtifactLive do
       {:error, :quota} ->
         {:noreply, put_flash(socket, :error, "This artifact has reached its submission limit.")}
 
-      {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "This artifact was deleted.")}
+      {:error, reason} when reason in [:not_found, :archived] ->
+        {:noreply, put_flash(socket, :error, "This artifact is no longer open.")}
     end
   end
 

@@ -15,21 +15,20 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
     %{artifact: artifact}
   end
 
-  defp join_as(artifact, viewer_id, name \\ nil) do
+  defp join_as(artifact, viewer_id) do
     {:ok, socket} = connect(ArtifactSocket, %{})
 
     subscribe_and_join(socket, ArtifactChannel, "artifact:" <> artifact.id, %{
-      "viewer_id" => viewer_id,
-      "name" => name
+      "viewer_id" => viewer_id
     })
   end
 
   test "join replies with the version and the flat state, then presence", %{artifact: artifact} do
-    assert {:ok, %{version: 1, state: %{"a.b" => 1}}, _socket} = join_as(artifact, "v1", "Ana")
-    assert_push "presence_state", %{"v1" => %{metas: [%{name: "Ana", meta: %{}}]}}
+    assert {:ok, %{version: 1, state: %{"a.b" => 1}}, _socket} = join_as(artifact, "v1")
+    assert_push "presence_state", %{"v1" => %{metas: [%{meta: %{}}]}}
   end
 
-  test "join needs a known artifact and a viewer id", %{artifact: artifact} do
+  test "join needs an open artifact and a viewer id", %{artifact: artifact} do
     {:ok, socket} = connect(ArtifactSocket, %{})
 
     assert {:error, %{reason: "not_found"}} =
@@ -39,6 +38,9 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
 
     assert {:error, %{reason: "viewer_id must be" <> _}} =
              subscribe_and_join(socket, ArtifactChannel, "artifact:" <> artifact.id, %{})
+
+    {:ok, _} = Store.archive(artifact.id)
+    assert {:error, %{reason: "archived"}} = join_as(artifact, "v1")
   end
 
   test "state ops persist, reply ok, and reach every viewer with attribution", %{
@@ -69,7 +71,7 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
   end
 
   test "presence updates merge meta", %{artifact: artifact} do
-    {:ok, _reply, socket} = join_as(artifact, "v1", "Ana")
+    {:ok, _reply, socket} = join_as(artifact, "v1")
     assert_push "presence_state", _state
 
     ref = push(socket, "presence:update", %{"meta" => %{"cursor" => [1, 2]}})
@@ -78,7 +80,7 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
   end
 
   test "broadcast reaches the other viewers, not the sender", %{artifact: artifact} do
-    {:ok, _reply, sender} = join_as(artifact, "v1", "Ana")
+    {:ok, _reply, sender} = join_as(artifact, "v1")
     {:ok, _reply, _other} = join_as(artifact, "v2")
 
     push(sender, "broadcast", %{"topic" => "pointer", "data" => %{"x" => 1}})
@@ -86,7 +88,7 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
     assert_push "broadcast", %{
       topic: "pointer",
       data: %{"x" => 1},
-      from: %{viewer: %{id: "v1", name: "Ana"}}
+      from: %{viewer: %{id: "v1"}}
     }
   end
 
@@ -111,5 +113,21 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
     stale = push(socket, "publish", %{"html" => "<p>late</p>", "if_version" => 1})
     assert_reply stale, :error, %{reason: "conflict"}
     assert {:ok, %{html: "<p>2</p>"}} = Store.current_version(artifact.id)
+  end
+
+  test "an open page learns of an archive on its next write", %{artifact: artifact} do
+    {:ok, _reply, socket} = join_as(artifact, "v1")
+    {:ok, _} = Store.archive(artifact.id)
+
+    ops = push(socket, "state:ops", %{"ops" => [%{"op" => "set", "path" => "z", "value" => 1}]})
+    assert_reply ops, :error, %{reason: "archived"}
+
+    submit = push(socket, "submit", %{"payload" => nil})
+    assert_reply submit, :error, %{reason: "archived"}
+
+    publish = push(socket, "publish", %{"html" => "<p>2</p>", "if_version" => 1})
+    assert_reply publish, :error, %{reason: "archived"}
+
+    assert Store.leaves(artifact.id) == %{"a.b" => 1}
   end
 end

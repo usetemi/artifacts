@@ -31,14 +31,14 @@ defmodule ArtifactsWeb.PageController do
   host. A page without a `<head>` gets the script before everything else.
   """
   def page(conn, %{"id" => id}) do
-    case Store.current_version(id) do
-      {:ok, version} ->
-        conn
-        |> put_resp_header("content-security-policy", @csp)
-        |> put_resp_header("cache-control", "no-store")
-        |> html(inject_runtime(version.html, id, version.number))
-
-      {:error, :not_found} ->
+    with {:ok, artifact} <- Store.get_open(id),
+         {:ok, version} <- Store.get_version(id, artifact.current_version) do
+      conn
+      |> put_resp_header("content-security-policy", @csp)
+      |> put_resp_header("cache-control", "no-store")
+      |> html(inject_runtime(version.html, id, version.number))
+    else
+      {:error, _missing_or_archived} ->
         conn |> put_status(:not_found) |> text("not found\n")
     end
   end

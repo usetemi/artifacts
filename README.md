@@ -28,7 +28,7 @@ Every page is served with `window.artifact`:
 - **Shared state**: a JSON document synced live to every viewer and to
   the agent's CLI. `artifact.state.set("cards.c1.column", "done")`.
 - **Presence**: who has the page open, with whatever they share about
-  themselves. `artifact.presence.track({name: "Ana"})`.
+  themselves. `artifact.presence.track({cursor: [x, y]})`.
 - **Broadcast**: ephemeral events between viewers. `artifact.broadcast("pointer", {x, y})`.
 - **Submit**: `artifact.submit(payload)` hands the page back to the
   waiting agent. The host chrome also has a Submit button, so every
@@ -38,11 +38,20 @@ Every page is served with `window.artifact`:
 
 Publishing a new version from the agent updates every open tab in place.
 
+## Everything is kept
+
+Every version, every state edit, and every submission is recorded in
+order and can be read back with `artifacts history <id>`: the agent's
+draft, what the person changed, what they submitted, what the agent
+published next. Nothing is deleted; `artifacts archive <id>` hides a
+page and closes it to edits.
+
 ## Install
 
-Server: see `deploy/` for Docker Compose (also local development) and
-Fly Sprites. The server is a Phoenix application with Postgres; state
-sync, presence, and broadcast run over Phoenix Channels.
+Server: see `deploy/` for Docker Compose (local development, tests,
+self-hosting) and Fly Machines with Neon. The server is a Phoenix
+application with Postgres; state sync, presence, and broadcast run over
+Phoenix Channels.
 
 CLI: download the `artifacts` binary for your platform from the
 releases page and set `ARTIFACTS_URL` to your server.
@@ -57,8 +66,9 @@ republish. `examples/triage.html` is a complete page to start from.
 There is no authentication in this version. Anyone with an artifact's
 URL can view it, change its state, submit, and publish over it. The id
 is the only secret, and there is no gallery page, so links stay
-unlisted. Pages run same-origin with the host. One host process, one
-Postgres. Full list and rationale in [DESIGN.md](DESIGN.md).
+unlisted. A viewer is a browser, not a person. Pages run same-origin
+with the host. One host process, one Postgres. Full list and rationale
+in [DESIGN.md](DESIGN.md).
 
 ## License
 

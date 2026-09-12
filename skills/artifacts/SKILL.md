@@ -26,6 +26,11 @@ A submission is `{id, version, viewer_id, state, payload, inserted_at}`:
 whatever the page passed to `artifact.submit(payload)` (null from the
 chrome's Submit button).
 
+Everything that happens to a page is kept. `artifacts history <id>`
+prints it in order, one JSON line per event: each version, each state
+edit with the viewer who made it, each submission. Read it to see how
+the viewer changed your draft, not only what they submitted.
+
 ## Writing a page
 
 Publish one self-contained HTML file. The host injects `window.artifact`
@@ -44,6 +49,8 @@ thing:
   `subscribe(fn)`. Paths are dotted; give list items their own paths
   (`items.<id>`) so concurrent edits do not clobber each other; `null`
   deletes.
+- `artifact.viewer.id` is this browser's random id. There are no names
+  or accounts.
 - `artifact.presence.track(meta)`, `list()`, `onChange(fn)` for who is
   viewing.
 - `artifact.broadcast(topic, data)`, `artifact.on(topic, fn)` for
@@ -69,15 +76,18 @@ artifacts state get <id> cards.c1
   edit state, and submit. Put nothing secret in a page or its state.
 - `publish --id <id> --if-version <n>` refuses to overwrite a version you
   have not seen (exit 1, `conflict`).
+- Nothing is deleted. `archive <id>` hides a page you are done with and
+  closes it to edits; its history stays readable.
 
 ## All commands
 
 ```
 artifacts publish <file|-> --title T [--id ID] [--if-version N]
-artifacts list | show ID | versions ID | get ID [--version N] | delete ID
+artifacts list | show ID | versions ID | get ID [--version N]
 artifacts state get ID [PATH] | state set ID PATH JSON | state delete ID PATH
 artifacts submit ID [--payload JSON] | submissions ID [--since N]
 artifacts wait ID [--since N] [--timeout SECONDS]
+artifacts history ID | archive ID
 ```
 
 Set `ARTIFACTS_URL` (or pass `--url`) to the host.

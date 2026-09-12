@@ -1,0 +1,31 @@
+# One Fly Machine that stops when idle and starts on the next request.
+# Copy this file, set `app` and PHX_HOST to your app name, pick the
+# region nearest your database, and set DATABASE_URL and SECRET_KEY_BASE
+# as secrets. See ../README.md.
+app = "artifacts"
+primary_region = "iad"
+
+[build]
+  image = "ghcr.io/usetemi/artifacts:v0.1.0"
+
+[deploy]
+  release_command = "/app/bin/migrate"
+
+[env]
+  # The origin the chrome and the page runtime connect from; sockets from
+  # any other host are refused.
+  PHX_HOST = "artifacts.fly.dev"
+  PORT = "4000"
+  DATABASE_SSL = "true"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

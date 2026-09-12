@@ -43,7 +43,20 @@ defmodule ArtifactsWeb.ArtifactLiveTest do
     assert_push_event view, "reload", %{}
   end
 
-  test "unknown artifacts are 404", %{conn: conn} do
+  test "unknown and archived artifacts are 404", %{conn: conn, artifact: artifact} do
     assert_raise ArtifactsWeb.NotFoundError, fn -> live(conn, ~p"/a/missing") end
+
+    {:ok, _} = Store.archive(artifact.id)
+    assert_raise ArtifactsWeb.NotFoundError, fn -> live(conn, ~p"/a/#{artifact.id}") end
+  end
+
+  test "submit after an archive records nothing", %{conn: conn, artifact: artifact} do
+    {:ok, view, _html} = live(conn, ~p"/a/#{artifact.id}")
+    {:ok, _} = Store.archive(artifact.id)
+
+    render_hook(view, "submit", %{"viewer_id" => "v1"})
+
+    assert Store.submissions(artifact.id) == []
+    refute has_element?(view, "#submitted")
   end
 end

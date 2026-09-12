@@ -21,7 +21,7 @@ let topicListeners = new Map()
 let frame = null
 
 const socket = new Socket("/socket", {})
-const channel = socket.channel(`artifact:${artifactId}`, () => ({viewer_id: viewer.id, name: viewer.name}))
+const channel = socket.channel(`artifact:${artifactId}`, () => ({viewer_id: viewer.id}))
 const presence = new Presence(channel)
 
 let resolveReady
@@ -97,17 +97,18 @@ let pendingMeta = {}
 
 function listPresence() {
   return presence.list((id, {metas: [first]}) => ({
-    viewer: {id, name: first.name ?? null},
+    viewer: {id},
     meta: first.meta ?? {},
   }))
 }
 
+// A viewer is a browser: the id lives in that browser's storage, so the
+// same person on the same machine is the same viewer across artifacts
+// and the history can tell viewers apart without any account.
 function loadViewer() {
   let id = null
-  let name = null
   try {
     id = localStorage.getItem("artifacts.viewer_id")
-    name = localStorage.getItem("artifacts.viewer_name")
     if (!id) {
       id = "v_" + Math.random().toString(36).slice(2, 12)
       localStorage.setItem("artifacts.viewer_id", id)
@@ -115,7 +116,7 @@ function loadViewer() {
   } catch {
     id = id ?? "v_" + Math.random().toString(36).slice(2, 12)
   }
-  return {id, name}
+  return {id}
 }
 
 const artifact = {
@@ -129,17 +130,6 @@ const artifact = {
   viewer: {
     get id() {
       return viewer.id
-    },
-    get name() {
-      return viewer.name
-    },
-    setName(name) {
-      viewer.name = name || null
-      try {
-        if (viewer.name) localStorage.setItem("artifacts.viewer_name", viewer.name)
-        else localStorage.removeItem("artifacts.viewer_name")
-      } catch {}
-      return artifact.presence.track({})
     },
   },
   state: {

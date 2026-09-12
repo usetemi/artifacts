@@ -1,7 +1,8 @@
 defmodule Artifacts.Store do
   @moduledoc """
   Everything durable about artifacts: create, publish versions, read and
-  write shared state, record submissions, and wait for them.
+  write shared state, record submissions, wait for them, archive, and
+  read the history back.
 
   Every write commits to Postgres first and then broadcasts on the
   artifact's PubSub topic (`topic/1`), so channels, the chrome, and a
@@ -10,15 +11,23 @@ defmodule Artifacts.Store do
     * `{:state_ops, ops, by}` after `apply_ops/3`
     * `{:version, number, by}` after `create/1` and `publish/3`
     * `{:submission, submission}` after `submit/3`
+
+  The tables hold the current view. The `events` table is the record:
+  every write appends one event in the same transaction as the row it
+  describes, so the path from the agent's draft through each viewer edit
+  to what was submitted survives even though state rows overwrite each
+  other. Nothing is deleted. `archive/1` hides an artifact and refuses
+  further writes; its history stays readable.
   """
 
   import Ecto.Query
 
-  alias Artifacts.{Artifact, Repo, State, StateEntry, Submission, Version}
+  alias Artifacts.{Artifact, Event, Repo, State, StateEntry, Submission, Version}
 
   @max_html_bytes 16 * 1024 * 1024
   @max_state_rows 10_000
   @max_submissions 10_000
+  @history_page 200
 
   @type by :: String.t()
 
@@ -53,14 +62,7 @@ defmodule Artifacts.Store do
             updated_at: now
           })
 
-        Repo.insert!(%Version{
-          artifact_id: id,
-          number: 1,
-          html: html,
-          published_by: by,
-          inserted_at: now
-        })
-
+        insert_version(id, 1, html, by, now)
         artifact
       end)
       |> case do
@@ -82,9 +84,18 @@ defmodule Artifacts.Store do
     end
   end
 
+  @doc "Like `get/1`, but an archived artifact is `{:error, :archived}`."
+  @spec get_open(String.t()) :: {:ok, Artifact.t()} | {:error, :not_found | :archived}
+  def get_open(id) do
+    with {:ok, artifact} <- get(id) do
+      if artifact.archived_at, do: {:error, :archived}, else: {:ok, artifact}
+    end
+  end
+
+  @doc "Open artifacts, most recently updated first."
   @spec list() :: [Artifact.t()]
   def list do
-    Repo.all(from a in Artifact, order_by: [desc: a.updated_at])
+    Repo.all(from a in Artifact, where: is_nil(a.archived_at), order_by: [desc: a.updated_at])
   end
 
   @doc """
@@ -93,7 +104,7 @@ defmodule Artifacts.Store do
   version, which is how two writers avoid overwriting each other.
   """
   @spec publish(String.t(), String.t(), keyword()) ::
-          {:ok, pos_integer()} | {:error, :not_found | :conflict | String.t()}
+          {:ok, pos_integer()} | {:error, :not_found | :archived | :conflict | String.t()}
   def publish(id, html, opts \\ []) do
     by = Keyword.get(opts, :by, agent())
 
@@ -104,6 +115,9 @@ defmodule Artifacts.Store do
           nil ->
             Repo.rollback(:not_found)
 
+          %Artifact{archived_at: %DateTime{}} ->
+            Repo.rollback(:archived)
+
           %Artifact{current_version: current} = artifact ->
             expected = Keyword.get(opts, :if_version, current)
 
@@ -112,14 +126,7 @@ defmodule Artifacts.Store do
             else
               number = current + 1
               now = DateTime.utc_now()
-
-              Repo.insert!(%Version{
-                artifact_id: id,
-                number: number,
-                html: html,
-                published_by: by,
-                inserted_at: now
-              })
+              insert_version(id, number, html, by, now)
 
               artifact
               |> Ecto.Changeset.change(
@@ -138,13 +145,22 @@ defmodule Artifacts.Store do
           broadcast(id, {:version, number, by})
           {:ok, number}
 
-        {:error, :not_found} ->
-          {:error, :not_found}
-
-        {:error, :conflict} ->
-          {:error, :conflict}
+        {:error, reason} when reason in [:not_found, :archived, :conflict] ->
+          {:error, reason}
       end
     end
+  end
+
+  defp insert_version(id, number, html, by, now) do
+    Repo.insert!(%Version{
+      artifact_id: id,
+      number: number,
+      html: html,
+      published_by: by,
+      inserted_at: now
+    })
+
+    record(id, "version", by, %{"number" => number}, now)
   end
 
   @spec versions(String.t()) :: [
@@ -175,12 +191,27 @@ defmodule Artifacts.Store do
     end
   end
 
-  @spec delete(String.t()) :: :ok | {:error, :not_found}
-  def delete(id) do
-    case Repo.delete_all(from a in Artifact, where: a.id == ^id) do
-      {1, _} -> :ok
-      {0, _} -> {:error, :not_found}
-    end
+  @doc """
+  Hides an artifact and refuses further writes. Every row stays, which
+  is the point: archiving is the only kind of removal, so a history is
+  never lost. Archiving an archived artifact changes nothing.
+  """
+  @spec archive(String.t()) :: {:ok, Artifact.t()} | {:error, :not_found}
+  def archive(id) do
+    Repo.transaction(fn ->
+      case Repo.one(from a in Artifact, where: a.id == ^id, lock: "FOR UPDATE") do
+        nil ->
+          Repo.rollback(:not_found)
+
+        %Artifact{archived_at: %DateTime{}} = artifact ->
+          artifact
+
+        artifact ->
+          now = DateTime.utc_now()
+          record(id, "archive", agent(), %{}, now)
+          artifact |> Ecto.Changeset.change(archived_at: now) |> Repo.update!()
+      end
+    end)
   end
 
   ## State
@@ -201,14 +232,15 @@ defmodule Artifacts.Store do
   normalized ops so a caller can echo them.
   """
   @spec apply_ops(String.t(), term(), by) ::
-          {:ok, [State.op()]} | {:error, :not_found | :quota | String.t()}
+          {:ok, [State.op()]} | {:error, :not_found | :archived | :quota | String.t()}
   def apply_ops(id, raw_ops, by) do
     with {:ok, ops} <- State.normalize_ops(raw_ops),
-         {:ok, _artifact} <- get(id) do
+         {:ok, _artifact} <- get_open(id) do
       now = DateTime.utc_now()
 
       Repo.transaction(fn ->
         Enum.each(ops, &apply_op_in_db(id, &1, by, now))
+        record_ops(id, ops, by, now)
 
         count = Repo.one(from e in StateEntry, where: e.artifact_id == ^id, select: count())
 
@@ -274,9 +306,11 @@ defmodule Artifacts.Store do
   ## Submissions
 
   @spec submit(String.t(), term(), String.t() | nil) ::
-          {:ok, Submission.t()} | {:error, :not_found | :quota}
+          {:ok, Submission.t()} | {:error, :not_found | :archived | :quota}
   def submit(id, payload, viewer_id) do
-    with {:ok, artifact} <- get(id) do
+    with {:ok, artifact} <- get_open(id) do
+      now = DateTime.utc_now()
+
       Repo.transaction(fn ->
         count = Repo.one(from s in Submission, where: s.artifact_id == ^id, select: count())
 
@@ -284,14 +318,18 @@ defmodule Artifacts.Store do
           Repo.rollback(:quota)
         end
 
-        Repo.insert!(%Submission{
-          artifact_id: id,
-          version: artifact.current_version,
-          viewer_id: viewer_id,
-          state: state(id),
-          payload: payload,
-          inserted_at: DateTime.utc_now()
-        })
+        submission =
+          Repo.insert!(%Submission{
+            artifact_id: id,
+            version: artifact.current_version,
+            viewer_id: viewer_id,
+            state: state(id),
+            payload: payload,
+            inserted_at: now
+          })
+
+        record(id, "submission", actor(viewer_id), %{"id" => submission.id}, now)
+        submission
       end)
       |> case do
         {:ok, submission} ->
@@ -361,7 +399,79 @@ defmodule Artifacts.Store do
     end
   end
 
+  ## History
+
+  @doc """
+  Up to #{@history_page} events after `since`, oldest first, each joined
+  with the row it describes: a version carries its HTML and a submission
+  its snapshot, so the output stands on its own. Page through with the
+  last event's `id` as the next `since`; an empty list is the end.
+  """
+  @spec history(String.t(), non_neg_integer()) :: [map()]
+  def history(id, since \\ 0) do
+    Repo.all(
+      from e in Event,
+        where: e.artifact_id == ^id and e.id > ^since,
+        order_by: [asc: e.id],
+        limit: @history_page
+    )
+    |> Enum.map(&resolve_event/1)
+  end
+
+  defp resolve_event(%Event{kind: "version", data: %{"number" => number}} = event) do
+    version = Repo.get_by!(Version, artifact_id: event.artifact_id, number: number)
+
+    event_json(event, %{
+      version: %{number: number, published_by: version.published_by, html: version.html}
+    })
+  end
+
+  defp resolve_event(%Event{kind: "state_op", data: op} = event), do: event_json(event, %{op: op})
+
+  defp resolve_event(%Event{kind: "submission", data: %{"id" => submission_id}} = event) do
+    submission = Repo.get!(Submission, submission_id)
+
+    event_json(event, %{
+      submission: %{
+        id: submission.id,
+        version: submission.version,
+        viewer_id: submission.viewer_id,
+        state: submission.state,
+        payload: submission.payload
+      }
+    })
+  end
+
+  defp resolve_event(%Event{kind: "archive"} = event), do: event_json(event, %{})
+
+  defp event_json(event, extra) do
+    Map.merge(%{id: event.id, kind: event.kind, actor: event.actor, at: event.inserted_at}, extra)
+  end
+
   ## Helpers
+
+  defp record(id, kind, actor, data, at) do
+    Repo.insert!(%Event{artifact_id: id, kind: kind, actor: actor, data: data, inserted_at: at})
+  end
+
+  defp record_ops(_id, [], _by, _now), do: :ok
+
+  defp record_ops(id, ops, by, now) do
+    rows =
+      Enum.map(ops, fn op ->
+        %{artifact_id: id, kind: "state_op", actor: by, data: op_data(op), inserted_at: now}
+      end)
+
+    Repo.insert_all(Event, rows)
+  end
+
+  defp op_data(%{op: :set, path: path, value: value}),
+    do: %{"op" => "set", "path" => path, "value" => value}
+
+  defp op_data(%{op: :delete, path: path}), do: %{"op" => "delete", "path" => path}
+
+  defp actor(nil), do: agent()
+  defp actor(viewer_id), do: viewer(viewer_id)
 
   defp broadcast(id, message) do
     Phoenix.PubSub.broadcast(Artifacts.PubSub, topic(id), message)

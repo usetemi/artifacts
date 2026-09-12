@@ -11,17 +11,68 @@ defmodule ArtifactsWeb.APITest do
     |> json_response(201)
   end
 
-  test "create, show, list, delete", %{conn: conn} do
+  test "create, show, list, archive", %{conn: conn} do
     created = create(conn)
-    assert %{"id" => id, "title" => "Board", "version" => 1, "url" => url} = created
+
+    assert %{"id" => id, "title" => "Board", "version" => 1, "url" => url, "archived_at" => nil} =
+             created
+
     assert url == url(~p"/a/#{id}")
 
     assert json_response(get(conn, ~p"/api/artifacts/#{id}"), 200) == created
     assert [%{"id" => ^id}] = json_response(get(conn, ~p"/api/artifacts"), 200)
 
-    assert response(delete(conn, ~p"/api/artifacts/#{id}"), 204)
-    assert json_response(get(conn, ~p"/api/artifacts/#{id}"), 404) == %{"error" => "not_found"}
-    assert json_response(delete(conn, ~p"/api/artifacts/#{id}"), 404) == %{"error" => "not_found"}
+    assert %{"id" => ^id, "archived_at" => at} =
+             json_response(post(conn, ~p"/api/artifacts/#{id}/archive"), 200)
+
+    assert is_binary(at)
+    assert json_response(get(conn, ~p"/api/artifacts"), 200) == []
+    assert %{"archived_at" => ^at} = json_response(get(conn, ~p"/api/artifacts/#{id}"), 200)
+
+    assert %{"error" => "archived"} =
+             json_response(put(conn, ~p"/api/artifacts/#{id}", %{"html" => "<p>x</p>"}), 409)
+
+    assert %{"error" => "archived"} =
+             json_response(post(conn, ~p"/api/artifacts/#{id}/state", %{"ops" => []}), 409)
+
+    assert %{"error" => "archived"} =
+             json_response(post(conn, ~p"/api/artifacts/#{id}/submissions", %{}), 409)
+
+    assert json_response(post(conn, ~p"/api/artifacts/missing/archive"), 404) == %{
+             "error" => "not_found"
+           }
+  end
+
+  test "history streams every event as one JSON document per line", %{conn: conn} do
+    %{"id" => id} = create(conn)
+
+    post(conn, ~p"/api/artifacts/#{id}/state", %{
+      "ops" => [%{"op" => "set", "path" => "a", "value" => 1}]
+    })
+
+    post(conn, ~p"/api/artifacts/#{id}/submissions", %{"payload" => "done", "viewer_id" => "v1"})
+
+    conn = get(conn, ~p"/api/artifacts/#{id}/history")
+    assert [type] = get_resp_header(conn, "content-type")
+    assert type =~ "application/x-ndjson"
+
+    lines = conn |> response(200) |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
+
+    assert [
+             %{
+               "kind" => "version",
+               "actor" => "agent",
+               "version" => %{"number" => 1, "html" => @html}
+             },
+             %{"kind" => "state_op", "op" => %{"op" => "set", "path" => "a", "value" => 1}},
+             %{
+               "kind" => "submission",
+               "actor" => "viewer:v1",
+               "submission" => %{"payload" => "done", "state" => %{"a" => 1}, "viewer_id" => "v1"}
+             }
+           ] = lines
+
+    assert json_response(get(conn, ~p"/api/artifacts/missing/history"), 404)
   end
 
   test "create validates its input", %{conn: conn} do
