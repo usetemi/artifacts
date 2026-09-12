@@ -41,9 +41,8 @@ Publishing a new version from the agent updates every open tab in place.
 ## Install
 
 Server: see `deploy/` for Docker Compose (also local development) and
-Fly Sprites. The server is a Phoenix application with Postgres and an
-embedded [Electric](https://github.com/electric-sql/electric) sync
-engine; Postgres needs `wal_level=logical`.
+Fly Sprites. The server is a Phoenix application with Postgres; state
+sync, presence, and broadcast run over Phoenix Channels.
 
 CLI: download the `artifacts` binary for your platform from the
 releases page and set `ARTIFACTS_URL` to your server.

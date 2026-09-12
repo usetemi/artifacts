@@ -59,34 +59,38 @@ Out (see [Limitations](#limitations) and [Later](#later)):
 
 ```
   agent (CLI)  ── HTTP/JSON ──►  host (Phoenix)  ◄── HTTP + WebSocket ──  browser
-                                    │   ├─ Electric (embedded)          ├─ chrome (LiveView)
-                                    │   └─ Channels + Presence          └─ page iframe + runtime.js
-                                 Postgres (same box, logical replication on)
+                                    │   └─ Channels + PubSub + Presence  ├─ chrome (LiveView)
+                                 Postgres (same box)                     └─ page iframe + runtime.js
 ```
 
 One Elixir/Phoenix application is the host. Postgres runs beside it.
-Electric runs inside the application (via `phoenix_sync` in embedded
-mode) and streams the state rows of one artifact to its viewers as a
-shape. Phoenix Channels carry presence, broadcast, and version events.
-There is no separate sync service and no message broker.
+Every artifact has one channel topic, `artifact:<id>`. A page joins it
+and receives a snapshot of the state rows; every later write is
+committed to Postgres and then broadcast on the topic as row-level ops,
+which each connected page applies. The same topic carries presence,
+broadcast, and version events. There is no separate sync service and no
+message broker.
 
 ### Why this shape
 
-- **Postgres rows plus Electric for state.** Shared state has to be
+- **Postgres rows plus Channels for state.** Shared state has to be
   durable, readable by the CLI, and live in every browser. Storing one
   row per path gives last-writer-wins per path (the same model Figma
-  uses for object properties), a trivial CLI (`state get` is a query),
-  and a live feed to browsers for free through Electric's shape protocol.
-  A CRDT was rejected: it adds a native dependency and a binary protocol
-  the CLI would also have to speak, for conflict resolution that a
-  submit-based loop does not need.
-- **Electric embedded, not a sidecar.** Electric is an Elixir
-  application; `phoenix_sync` mounts it in the same VM and exposes Ecto
-  queries as shapes from a controller, so per-artifact filtering is one
-  `where` clause. One process to deploy.
+  uses for object properties) and a trivial CLI (`state get` is a
+  query). Fan-out is a PubSub broadcast after commit; a page that
+  reconnects re-joins and takes a fresh snapshot, so a missed broadcast
+  never leaves it stale. A CRDT was rejected: it adds a native
+  dependency and a binary protocol the CLI would also have to speak, for
+  conflict resolution that a submit-based loop does not need.
 - **Channels for the ephemeral parts.** Presence and broadcast are
   exactly what Phoenix.Presence and PubSub provide, and they need no
-  persistence.
+  persistence. Using the same channel for state keeps one connection
+  per page and one reconnect path.
+- **A sync engine is deferred, not ruled out.** Electric was the first
+  choice for state sync and is recorded under rejected alternatives with
+  the reason. Channels are the starting point; if they prove
+  insufficient (resumable logs, offline pages, a client database), a
+  sync engine can replace the fan-out without changing the rows.
 - **Read on submit, not on change.** The agent blocks on `wait` and
   receives whole submissions. No push integration into any harness is
   required, so the same CLI and skill work in every harness. The viewer
@@ -145,8 +149,9 @@ submissions (
 )
 ```
 
-Electric syncs `state_entries where artifact_id = $id` to the page. The
-other tables are read through the HTTP API.
+A page receives the artifact's `state_entries` as a snapshot when it
+joins the channel and as ops afterwards. The other tables are read
+through the HTTP API.
 
 ### State paths
 
@@ -171,9 +176,8 @@ Values are limited to 256 KiB serialized. An artifact holds at most
 | --- | --- |
 | `GET /a/:id` | The chrome (LiveView): title, version, presence count, Submit button, and the page iframe. Reloads the iframe when a new version is published. |
 | `GET /a/:id/page` | The current version's HTML with `<script src="/runtime.js">` injected before `</head>`. Served with a CSP that allows inline script and same-origin connections. Stored HTML is never modified. |
-| `GET /runtime.js` | The page runtime (below), bundled with the Electric client and the Phoenix channel client so pages need no CDN. |
-| `GET /api/shapes/state?artifact_id=:id` | Electric shape of the artifact's state rows (`sync_render` with a per-request query). |
-| `/socket` | Phoenix socket; channel `artifact:<id>` for presence, broadcast, and `version` events. |
+| `GET /runtime.js` | The page runtime (below), bundled with the Phoenix channel client so pages need no CDN. |
+| `/socket` | Phoenix socket; channel `artifact:<id>` for the state snapshot and ops, presence, broadcast, submit, publish, and `version` events. |
 | `POST /api/artifacts` | Create: `{title, html}` → `{id, url, version: 1}`. |
 | `GET /api/artifacts` | List: id, title, current version, updated at. |
 | `GET /api/artifacts/:id` | Metadata. |
@@ -189,6 +193,26 @@ Values are limited to 256 KiB serialized. An artifact holds at most
 Every write attributes itself: `published_by` and `updated_by` are
 `agent` for CLI calls and `viewer:<id>` for page calls. The page runtime
 sends its viewer id; the CLI sends nothing and is trusted as the agent.
+
+### Channel protocol
+
+A page joins `artifact:<id>` with `{viewer_id, name}`. The join reply
+carries `{version, state}` where `state` is the flat map of rows, and
+Phoenix.Presence sends the presence list right after.
+
+| Direction | Event | Payload |
+| --- | --- | --- |
+| page → host | `state:ops` | `[{op: "set", path, value} \| {op: "delete", path}]`; reply `ok` after commit |
+| host → pages | `state:ops` | the same ops plus `by`, sent to every subscriber after commit, the writer included |
+| page → host | `presence:update` | meta object to merge into this viewer's presence |
+| page → host | `broadcast` | `{topic, data}`; the host re-emits it to the other pages as `broadcast` with `from` |
+| page → host | `submit` | `{payload}`; reply `{id}` |
+| page → host | `publish` | `{html, if_version}`; reply `{version}` or `{error: "conflict"}` |
+| host → pages | `version` | `{version, by}` on every publish, from the CLI or a page |
+
+CLI writes take the HTTP routes and end in the same PubSub broadcast,
+so a page cannot tell whether an op came from another viewer or from
+the agent except by `by`.
 
 ### Publish and live reload
 
@@ -211,10 +235,11 @@ command timeout; the CLI loops when told to wait longer.
 ### Sleep and reconnect
 
 On a host that pauses when idle (Fly Sprites), open connections drop.
-The channel client and the Electric shape stream both reconnect with
-backoff; the reconnect request is what wakes the host. Nothing is lost:
-state is in Postgres, and a submission that raced a pause is still in
-the table when `wait` reconnects and re-reads from its cursor.
+The channel client reconnects with backoff and re-joins, and the join
+reply is a fresh snapshot, so nothing broadcast during the gap is
+missed; the reconnect request is what wakes the host. A submission that
+raced a pause is still in the table when `wait` reconnects and re-reads
+from its cursor.
 
 ## Page API
 
@@ -260,8 +285,10 @@ await artifact.publish(html);   // rejects {code: "conflict"} if someone publish
 Rules the runtime enforces or promises:
 
 - `state.set` applies locally at once and resolves when the host has
-  written the row; the same change then arrives through the shape and is
-  a no-op. Other viewers' writes arrive through the shape only.
+  committed the row; the same op then arrives back on the channel and is
+  a no-op. Other viewers' and the agent's writes arrive on the channel
+  only. After a reconnect the runtime replaces its cache with the join
+  snapshot and fires `subscribe` once.
 - `subscribe` fires once with the current state after the initial sync,
   then on every change, coalesced per animation frame.
 - `presence.track` may be called before `ready`; the meta is sent when
@@ -335,25 +362,23 @@ DESIGN.md README.md LICENSE
 
 ## Deployment
 
-The host needs Postgres 14 or later with `wal_level=logical` and a role
-with the `REPLICATION` attribute, because Electric reads the write-ahead
-log. Electric also keeps its shape log on local disk, so the host needs a
-persistent directory.
+The host needs Postgres 14 or later. Nothing else: no replication
+settings, no object storage, no broker.
 
 **Docker Compose** (`deploy/docker-compose.yml`): the host image plus a
-Postgres container started with `-c wal_level=logical`, two named
-volumes, and a `.env` with `SECRET_KEY_BASE` and the public host name.
-This is also the local development setup.
+Postgres container, one named volume for the database, and a `.env`
+with `SECRET_KEY_BASE` and the public host name. This is also the local
+development setup.
 
 **Fly Sprites** (`deploy/sprites/`): a script that installs Erlang,
-Elixir, and Postgres into a fresh Sprite, initializes the database with
-logical replication, registers two services (`postgres`, then `app` with
-`--needs postgres --http-port 4000`), sets `--url-auth public`, and takes
-a checkpoint. The Sprite sleeps when idle and wakes on the next request;
-see [Sleep and reconnect](#sleep-and-reconnect).
+Elixir, and Postgres into a fresh Sprite, initializes the database,
+registers two services (`postgres`, then `app` with `--needs postgres
+--http-port 4000`), sets `--url-auth public`, and takes a checkpoint.
+The Sprite sleeps when idle and wakes on the next request; see
+[Sleep and reconnect](#sleep-and-reconnect).
 
 Configuration is environment variables only: `DATABASE_URL`,
-`SECRET_KEY_BASE`, `PHX_HOST`, `PORT`, `ELECTRIC_STORAGE_DIR`.
+`SECRET_KEY_BASE`, `PHX_HOST`, `PORT`.
 
 ## Limitations
 
@@ -366,8 +391,8 @@ Configuration is environment variables only: `DATABASE_URL`,
   wrote them.
 - **No history for state.** Only the current row per path is kept.
   Submissions are the snapshots; versions cover the HTML.
-- **Single node.** One host process, one Postgres. Electric's shape log
-  is per node.
+- **Single node.** One host process, one Postgres. PubSub fan-out is
+  in-process; a second host node would need a shared PubSub adapter.
 - **Connections drop when a Sprite sleeps.** Clients reconnect; a viewer
   sees a short pause after idle time, not lost data.
 - **Size caps.** 16 MiB per version, 256 KiB per state value, 10,000
@@ -388,14 +413,23 @@ Configuration is environment variables only: `DATABASE_URL`,
   viewer is done. Submit plus `wait` is portable and intentional.
 - **A CRDT for state.** Not needed for a submit-based loop; costs a
   native dependency and a second protocol in the CLI.
-- **SQLite.** Simpler to run, but no logical replication, so no Electric.
+- **Electric as the state sync engine.** It was the first choice: rows
+  synced to browsers as shapes over HTTP, resumable and cacheable, with a
+  path to a client database. Two facts moved it to "later": the library
+  that embeds Electric in a Phoenix app has had no release since October
+  2025 and pins Electric to 1.1.10 while Electric is at 1.8, and running
+  Electric as a separate service adds a third process plus a proxy route
+  (a Sprite exposes one HTTP port). Channels cover v1; the row model is
+  unchanged if a sync engine returns.
+- **SQLite.** Simpler to run than Postgres, but a later move to a sync
+  engine or a second node would be a migration; Postgres costs one more
+  process now and nothing later.
 - **A compatibility layer for another vendor's page API.** Pages written
   for a proprietary runtime would port, at the cost of matching a large
   and moving surface. This API is designed from the loop it serves.
 - **An MCP server as the agent interface.** Typed tools, but per-harness
   configuration and a process per session. A CLI works everywhere a
   shell does and the skill carries the typing.
-- **Managed Postgres without logical replication.** Rules out Electric.
 
 ## Later
 
