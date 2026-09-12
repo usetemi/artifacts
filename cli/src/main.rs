@@ -344,3 +344,14 @@ fn urlencode(raw: &str) -> String {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::urlencode;
+
+    #[test]
+    fn state_paths_survive_the_query_string() {
+        assert_eq!(urlencode("cards.c1.column"), "cards.c1.column");
+        assert_eq!(urlencode("a b&c=d/é"), "a%20b%26c%3Dd%2F%C3%A9");
+    }
+}

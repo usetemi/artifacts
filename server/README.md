@@ -1,18 +1,15 @@
-# Artifacts
+# server
 
-To start your Phoenix server:
+The host: a Phoenix application backed by Postgres. See `../DESIGN.md`
+for what it does and why.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+```sh
+docker compose -f ../deploy/docker-compose.yml up -d postgres   # or any Postgres 14+
+mix setup
+mix phx.server          # http://localhost:4000
+mix test                # ExUnit
+node --test assets/test # the browser runtime's state rules, on the shared fixture
+```
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
-
-Ready to run in production? Please [check our deployment guides](https://phoenix.hexdocs.pm/deployment.html).
-
-## Learn more
-
-* Official website: https://www.phoenixframework.org/
-* Guides: https://phoenix.hexdocs.pm/overview.html
-* Docs: https://phoenix.hexdocs.pm
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+`config/dev.exs` expects Postgres on `localhost:5432` as `postgres` /
+`postgres`. The Compose file above publishes it there.

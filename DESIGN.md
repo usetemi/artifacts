@@ -344,8 +344,8 @@ inserted_at}`).
 
 ## Skill
 
-`skill/SKILL.md` teaches an agent the loop and installs into Claude Code
-and Codex as a skill directory (`npx skills add <repo>` layout). It
+`skills/artifacts/SKILL.md` teaches an agent the loop and installs into
+Claude Code and Codex with `npx skills add <owner>/<repo>`. It
 covers: when a page beats text, how to write a page against
 `window.artifact`, publish, then `wait`, then act on the submission,
 then republish. It also says what not to do: no external assets that a
@@ -355,10 +355,12 @@ state (the id is the only protection).
 ## Repository layout
 
 ```
-server/   Phoenix application (Elixir), including runtime.js source and its build
-cli/      Rust crate for the artifacts binary
-skill/    SKILL.md and helper files installed into agents
-deploy/   docker-compose.yml, Sprites provisioning script, deploy docs
+server/    Phoenix application (Elixir), including the runtime.js source and its build
+cli/       Rust crate for the artifacts binary
+skills/    artifacts/SKILL.md, installed into agents
+examples/  complete pages to start from
+deploy/    docker-compose.yml, Sprites provisioning, deploy docs
+.github/   ci (tests) and release (CLI binaries, server release tarball) workflows
 DESIGN.md README.md LICENSE
 ```
 

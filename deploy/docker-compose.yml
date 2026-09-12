@@ -1,0 +1,35 @@
+name: artifacts
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: artifacts
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-artifacts}
+      POSTGRES_DB: artifacts
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artifacts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: ../server
+    command: ["sh", "-c", "/app/bin/migrate && exec /app/bin/server"]
+    environment:
+      DATABASE_URL: ecto://artifacts:${POSTGRES_PASSWORD:-artifacts}@postgres/artifacts
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?generate one with `openssl rand -base64 48`}
+      PHX_HOST: ${PHX_HOST:-localhost}
+      PHX_SCHEME: ${PHX_SCHEME:-http}
+      PORT: "4000"
+    ports:
+      - "${PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres:

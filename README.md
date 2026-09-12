@@ -47,9 +47,10 @@ sync, presence, and broadcast run over Phoenix Channels.
 CLI: download the `artifacts` binary for your platform from the
 releases page and set `ARTIFACTS_URL` to your server.
 
-Agent skill: install `skill/` into Claude Code or Codex so the agent
-knows the loop: write a page against `window.artifact`, `publish`,
-`wait`, act on the submission, republish.
+Agent skill: `npx skills add usetemi/artifacts` installs `skills/artifacts`
+into Claude Code and Codex, so the agent knows the loop: write a page
+against `window.artifact`, `publish`, `wait`, act on the submission,
+republish. `examples/triage.html` is a complete page to start from.
 
 ## Limitations
 
