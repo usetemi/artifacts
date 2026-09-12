@@ -1,0 +1,85 @@
+{
+  "_comment": "Canonical cases for the state-tree rules in DESIGN.md (State paths). Run by test/artifacts/state_test.exs and by the browser runtime's test so both implementations agree.",
+  "cases": [
+    {
+      "name": "set a leaf",
+      "leaves": {},
+      "ops": [{"op": "set", "path": "a.b", "value": 1}],
+      "expected": {"a.b": 1},
+      "expanded": {"a": {"b": 1}}
+    },
+    {
+      "name": "set an object writes its leaves",
+      "leaves": {},
+      "ops": [{"op": "set", "path": "cards.c2", "value": {"title": "Fix nav", "column": "now"}}],
+      "expected": {"cards.c2.title": "Fix nav", "cards.c2.column": "now"},
+      "expanded": {"cards": {"c2": {"title": "Fix nav", "column": "now"}}}
+    },
+    {
+      "name": "set replaces the subtree below the path",
+      "leaves": {"a.b": 1, "a.c": 2, "z": 0},
+      "ops": [{"op": "set", "path": "a", "value": {"d": 3}}],
+      "expected": {"a.d": 3, "z": 0},
+      "expanded": {"a": {"d": 3}, "z": 0}
+    },
+    {
+      "name": "set below a leaf removes the leaf",
+      "leaves": {"a": 1},
+      "ops": [{"op": "set", "path": "a.b", "value": 2}],
+      "expected": {"a.b": 2},
+      "expanded": {"a": {"b": 2}}
+    },
+    {
+      "name": "arrays, empty objects, and strings are single leaves",
+      "leaves": {},
+      "ops": [
+        {"op": "set", "path": "list", "value": [1, 2, {"x": 3}]},
+        {"op": "set", "path": "empty", "value": {}},
+        {"op": "set", "path": "name", "value": "Ana"}
+      ],
+      "expected": {"list": [1, 2, {"x": 3}], "empty": {}, "name": "Ana"},
+      "expanded": {"list": [1, 2, {"x": 3}], "empty": {}, "name": "Ana"}
+    },
+    {
+      "name": "null deletes, at the top level and nested",
+      "leaves": {"gone": 1, "obj.keep": 1, "obj.drop": 2},
+      "ops": [
+        {"op": "set", "path": "gone", "value": null},
+        {"op": "set", "path": "obj", "value": {"keep": 1, "drop": null, "added": null}}
+      ],
+      "expected": {"obj.keep": 1},
+      "expanded": {"obj": {"keep": 1}}
+    },
+    {
+      "name": "delete removes the path and everything below it",
+      "leaves": {"a.b": 1, "a.c.d": 2, "ab": 3},
+      "ops": [{"op": "delete", "path": "a"}],
+      "expected": {"ab": 3},
+      "expanded": {"ab": 3}
+    },
+    {
+      "name": "delete of a missing path is a no-op",
+      "leaves": {"a": 1},
+      "ops": [{"op": "delete", "path": "b"}],
+      "expected": {"a": 1},
+      "expanded": {"a": 1}
+    },
+    {
+      "name": "later ops win",
+      "leaves": {},
+      "ops": [
+        {"op": "set", "path": "k", "value": 1},
+        {"op": "set", "path": "k", "value": 2}
+      ],
+      "expected": {"k": 2},
+      "expanded": {"k": 2}
+    },
+    {
+      "name": "a leaf inside a set object replaces a deeper subtree",
+      "leaves": {"a.b.c": 1},
+      "ops": [{"op": "set", "path": "a", "value": {"b": 5}}],
+      "expected": {"a.b": 5},
+      "expanded": {"a": {"b": 5}}
+    }
+  ]
+}

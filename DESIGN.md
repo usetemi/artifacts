@@ -163,7 +163,9 @@ document never holds both `a` and `a.b`. `delete("a")` removes `a` and
 `a.*`. Arrays are stored as one leaf value; to edit one element, store
 elements at their own paths (`items.<id>`), which is also what makes
 concurrent edits by different viewers land without clobbering each
-other. Last write wins per path; there are no transactions across paths.
+other. `null` means absence: `set("a", null)` is `delete("a")`, and a
+null inside an object writes no leaf, so no path ever reads back as
+null. Last write wins per path; there are no transactions across paths.
 
 Values are limited to 256 KiB serialized. An artifact holds at most
 10,000 rows.
@@ -175,8 +177,8 @@ Values are limited to 256 KiB serialized. An artifact holds at most
 | Route | Purpose |
 | --- | --- |
 | `GET /a/:id` | The chrome (LiveView): title, version, presence count, Submit button, and the page iframe. Reloads the iframe when a new version is published. |
-| `GET /a/:id/page` | The current version's HTML with `<script src="/runtime.js">` injected before `</head>`. Served with a CSP that allows inline script and same-origin connections. Stored HTML is never modified. |
-| `GET /runtime.js` | The page runtime (below), bundled with the Phoenix channel client so pages need no CDN. |
+| `GET /a/:id/page` | The current version's HTML with the runtime `<script>` injected right after `<head>` (or first, when there is no head). Served with a CSP: scripts from this origin and the common CDNs, connections to this origin only, images from anywhere. Stored HTML is never modified. |
+| `GET /assets/js/runtime.js` | The page runtime (below), bundled with the Phoenix channel client so pages need no CDN. |
 | `/socket` | Phoenix socket; channel `artifact:<id>` for the state snapshot and ops, presence, broadcast, submit, publish, and `version` events. |
 | `POST /api/artifacts` | Create: `{title, html}` → `{id, url, version: 1}`. |
 | `GET /api/artifacts` | List: id, title, current version, updated at. |

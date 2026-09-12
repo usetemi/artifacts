@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Issue triage</title>
+    <style>
+      body { margin: 0; padding: 24px; font: 15px/1.5 system-ui, sans-serif; color: #1b2433; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.lead { margin: 0 0 20px; color: #5c6779; }
+      .columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+      .column { border: 1px solid rgba(27, 36, 51, 0.12); border-radius: 4px; padding: 12px; min-height: 160px; }
+      .column h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 12px; color: #5c6779; }
+      .card { border: 1px solid rgba(27, 36, 51, 0.12); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; background: #fff; }
+      .card button { margin-right: 4px; font: inherit; font-size: 12px; padding: 2px 6px; }
+      .peers { margin-top: 20px; color: #5c6779; }
+      textarea { width: 100%; margin-top: 16px; font: inherit; padding: 8px; border: 1px solid rgba(27, 36, 51, 0.12); border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Issue triage</h1>
+    <p class="lead">Move each issue to a column, add notes, then press Submit in the bar above.</p>
+    <div class="columns" id="columns"></div>
+    <textarea id="notes" rows="3" placeholder="Notes for the agent"></textarea>
+    <p class="peers" id="peers"></p>
+
+    <script>
+      const columns = ["now", "next", "later"];
+
+      function render(state) {
+        const cards = state.cards ?? {};
+        document.getElementById("columns").innerHTML = columns
+          .map((column) => {
+            const items = Object.entries(cards)
+              .filter(([, card]) => card.column === column)
+              .map(([id, card]) => {
+                const moves = columns
+                  .filter((c) => c !== column)
+                  .map((c) => `<button data-id="${id}" data-column="${c}">→ ${c}</button>`)
+                  .join("");
+                return `<div class="card"><div>${card.title}</div>${moves}</div>`;
+              })
+              .join("");
+            return `<div class="column"><h2>${column}</h2>${items}</div>`;
+          })
+          .join("");
+        const notes = document.getElementById("notes");
+        if (document.activeElement !== notes) notes.value = state.notes ?? "";
+      }
+
+      document.getElementById("columns").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-id]");
+        if (button) artifact.state.set(`cards.${button.dataset.id}.column`, button.dataset.column);
+      });
+
+      document.getElementById("notes").addEventListener("change", (event) => {
+        artifact.state.set("notes", event.target.value);
+      });
+
+      artifact.state.subscribe(render);
+
+      artifact.presence.onChange((viewers) => {
+        document.getElementById("peers").textContent =
+          viewers.length === 1 ? "You are the only viewer." : `${viewers.length} people are viewing this board.`;
+      });
+    </script>
+  </body>
+</html>

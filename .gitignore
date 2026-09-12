@@ -4,10 +4,9 @@ server/deps/
 server/.elixir_ls/
 server/*.ez
 server/erl_crash.dump
-server/priv/static/assets/
+server/priv/static/assets/js/
 server/priv/static/cache_manifest.json
 server/assets/node_modules/
-server/priv/electric/
 
 # Rust (cli/)
 cli/target/
