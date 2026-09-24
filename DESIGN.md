@@ -100,7 +100,10 @@ member looks up an existing User by email and fails when there is none.
 Organization-scoped Accounts actions: a `User` passes when
 `exists(organization.memberships, user_id == ^actor(:id))`, an `Agent`
 when `organization_id == ^actor(:organization_id)`. `Harness` actions
-pass only for their own User. Reads by id load the record and filter by
+pass only for their own User. Actions that manage access (Membership
+create and destroy, Agent create, Harness and AgentKey create and revoke)
+also `forbid_if AshAuthentication.Checks.UsingApiKey` and forbid Agent
+actors, so only a browser-signed-in User manages access. Reads by id load the record and filter by
 the rule, so a non-member gets not-found, never forbidden.
 
 ## Content changes

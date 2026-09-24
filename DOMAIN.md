@@ -36,7 +36,7 @@ Core modeling themes:
 | **Personal Organization** | The Organization created for a User at sign-up, with that User as its first member. It is an ordinary Organization under every rule; it differs only in being the default target for that User's publishes. |
 | **Membership** | A User's belonging to an Organization. Every member has the same rights. |
 | **Harness** | A User's coding tool — an MCP client such as Claude Code or Codex — connected with a named key that User issues, and shown as, for example, "Victor's Claude Code on kanto". A Harness acts as its User, with that User's rights. A User may have several Harnesses. |
-| **Agent** | A coworker agent, such as Pidgey, that belongs to exactly one Organization and acts as itself, not as any person. Any member of its Organization creates it and issues its keys. |
+| **Agent** | A coworker agent, such as Pidgey, that belongs to exactly one Organization and acts as itself, not as any person. A member of its Organization creates it and issues its keys. |
 | **Actor** | Whoever performs an action: a User, a Harness (acting as its User), or an Agent. Every Event records its Actor. |
 | **Viewer** | An Actor with an Artifact's page open. Only Actors in the Artifact's Organization can open it. |
 
@@ -100,12 +100,16 @@ Core modeling themes:
 - Sign-up creates the User's Personal Organization with the User as its
   member.
 - Any User may create further Organizations and becomes their first member.
+- Managing access is done only by a User acting directly, never through a
+  Harness or Agent: adding and removing members, creating Agents, and issuing
+  and revoking keys.
 - Any member adds an existing User to an Organization by email, and may remove
   a member; a User may leave. An Organization always keeps at least one
   member, so its last member can be neither removed nor leave. What a removed
   User did stays in the History, attributed to them.
-- An Agent belongs to exactly one Organization and has a member's rights
-  there. Any member creates it and issues and revokes its keys.
+- An Agent belongs to exactly one Organization and works on its Artifacts
+  with a member's rights. Any member creates it and issues and revokes its
+  keys.
 - A Harness acts with exactly its User's rights, in every Organization that
   User belongs to. Its User issues and revokes its key.
 
