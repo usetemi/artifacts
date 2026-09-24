@@ -32,8 +32,9 @@ service.
 
 ## Ash domains and resources
 
-Two Ash domains. Organization scoping is `belongs_to :organization` plus
-policies, not Ash multitenancy (see [Rejected alternatives](#rejected-alternatives)).
+Two Ash domains, `Artifacts.Accounts` and `Artifacts.Publishing`.
+Organization scoping is `belongs_to :organization` plus policies, not Ash
+multitenancy (see [Rejected alternatives](#rejected-alternatives)).
 
 ### `Artifacts.Accounts`
 
@@ -47,7 +48,7 @@ policies, not Ash multitenancy (see [Rejected alternatives](#rejected-alternativ
 | `Agent` | `organization_id`, name | Its own AshAuthentication resource with an API-key strategy. |
 | `AgentKey` | `agent_id`, name, key hash, `expires_at`, `revoked_at` | An Agent's keys. |
 
-### `Artifacts.Pages`
+### `Artifacts.Publishing`
 
 | Resource | Holds | Notes |
 | --- | --- | --- |
@@ -88,14 +89,14 @@ record it; that is the only place the Harness enters the actor columns.
 or whose domain is not in `SIGNUP_EMAIL_DOMAINS` (empty means any), so no
 User row is written. On success an `after_action` hook, in the same
 transaction, creates the Personal Organization and its Membership and
-sets `personal_organization_id`. The hook runs only when the upsert
-inserted.
+sets `personal_organization_id` when the User has none, so a repeat
+sign-in changes nothing.
 
 **Membership invariant.** `Membership.destroy` (remove or leave) locks the
 organization row and refuses when it is the last Membership. Adding a
 member looks up an existing User by email and fails when there is none.
 
-**Policies.** One rule covers every `Artifacts.Pages` action and the
+**Policies.** One rule covers every `Artifacts.Publishing` action and the
 Organization-scoped Accounts actions: a `User` passes when
 `exists(organization.memberships, user_id == ^actor(:id))`, an `Agent`
 when `organization_id == ^actor(:organization_id)`. `Harness` actions
@@ -159,10 +160,17 @@ artifact id and the viewing actor, valid for 10 minutes. The iframe's
 route verifies the token, re-checks the actor against the policy, and
 returns the current Version's HTML with the runtime `<script>` injected
 right after `<head>` and the token in its config. Stored HTML is never
-modified. Responses set `Referrer-Policy: no-referrer` so the token does
-not leak through links, and a CSP allowing scripts from this origin and
-the common CDNs, connections to the socket host only, and images from
-anywhere.
+modified. The token's 10-minute lifetime bounds any leak; responses also
+set `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, and the
+`t` parameter is filtered from request logs. Responses carry a CSP
+allowing scripts from this origin and the common CDNs, connections to the
+socket host only, and images from anywhere. The iframe is `sandbox`ed with scripts, same-origin, forms,
+modals, popups, and downloads allowed, but not top navigation, so a page
+cannot navigate the chrome's tab.
+
+An archived Artifact's chrome shows its title and archive status with an
+Unarchive control and no iframe; its Versions, State, and History are
+read through MCP and the HTTP API.
 
 **Socket.** The runtime connects to the socket with the token as a
 connect param; the socket assigns the actor, and joining
@@ -199,7 +207,7 @@ connection opens asynchronously, so pages await `artifact.ready`.
 ```js
 await artifact.ready;
 artifact.id; artifact.version;
-artifact.viewer;                       // {kind: "user" | "agent", id, name}
+artifact.viewer;                       // {id, name}: the signed-in User
 
 artifact.state.get("cards.c1");
 await artifact.state.set("cards.c1.column", "done");
@@ -287,8 +295,8 @@ LiveView on usetemi.art, behind Google sign-in:
 - **Artifact page** (`/a/:id`): the chrome (title, Version, Presence,
   Submit, rename, archive) around the page iframe.
 - **Settings**: create an Organization; add a member by email, remove a
-  member, leave; create an Agent and issue or revoke its keys; issue or
-  revoke your own Harness keys. A new key is shown once.
+  member, leave; create an Agent and issue or revoke its keys; create or
+  revoke your own Harnesses. A new key is shown once.
 
 ## Repository layout
 
@@ -306,11 +314,13 @@ DOMAIN.md DESIGN.md README.md LICENSE
 
 ## Deployment
 
-**Fly.io** (`deploy/fly/fly.toml`): one always-running Machine
-(`min_machines_running = 1`) serving both hostnames, in the same region as
+**Fly.io** (`deploy/fly/fly.toml`): one Machine that stops when nothing
+is connected and starts on the next request, serving both hostnames, in the same region as
 a Fly Managed Postgres cluster attached with `fly mpg attach` as
 `DATABASE_URL`. Migrations run as the `release_command`. Both hostnames
-get certificates with `fly certs add`. MPG's backups hold the record.
+get certificates with `fly certs add`. MPG's backups hold the record. An open page's socket or a running `wait`
+keeps the Machine up; after a stop, pages reconnect and rejoin with a
+fresh snapshot, and `wait` resumes from its cursor.
 
 **Docker Compose** (`deploy/docker-compose.yml`): the image plus a
 Postgres container; local development, tests, and self-hosting. Two
