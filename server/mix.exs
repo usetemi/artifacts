@@ -11,7 +11,8 @@ defmodule Artifacts.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      usage_rules: usage_rules()
     ]
   end
 
@@ -53,7 +54,28 @@ defmodule Artifacts.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:ash, "~> 3.33"},
+      {:ash_postgres, "~> 2.13"},
+      {:ash_authentication, "~> 4.15"},
+      {:ash_authentication_phoenix, "~> 2.17"},
+      {:ash_phoenix, "~> 2.3"},
+      {:ash_ai, "~> 1.1"},
+      {:ash_json_api, "~> 1.7"},
+      {:igniter, "~> 0.8.4", only: [:dev, :test]},
+      {:usage_rules, "~> 1.2", only: [:dev]}
+    ]
+  end
+
+  defp usage_rules do
+    [
+      file: "AGENTS.md",
+      usage_rules: [
+        {:usage_rules, sub_rules: []},
+        "phoenix:all",
+        {:ash, link: :markdown},
+        {~r/^ash_/, link: :markdown}
+      ]
     ]
   end
 
