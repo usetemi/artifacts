@@ -309,11 +309,14 @@ skills/    artifacts/SKILL.md
 examples/  complete pages to start from
 deploy/    docker-compose.yml, fly/fly.toml, deploy docs
 .github/   CI and the container image release
-DOMAIN.md DESIGN.md README.md LICENSE
+AGENTS.md CLAUDE.md DOMAIN.md DESIGN.md README.md LICENSE
 ```
 
-`server/AGENTS.md` loads `DOMAIN.md` and `DESIGN.md` and keeps the
-`usage_rules` block that `mix usage_rules.sync` maintains.
+The root `AGENTS.md` loads `DOMAIN.md` and `DESIGN.md`; `CLAUDE.md`
+imports it. `server/AGENTS.md` holds the Phoenix guidelines and the
+usage-rules block that `mix usage_rules.sync` writes from the
+`usage_rules` config in `server/mix.exs`: Phoenix and `usage_rules`
+inline, Ash and its extensions as links into `deps/`.
 
 ## Deployment
 
