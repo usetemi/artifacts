@@ -39,6 +39,7 @@ jobs:
             server/_build
           key: mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
       - run: mix deps.get
+      - run: mix hex.audit
       - run: mix compile --warnings-as-errors
       - run: mix format --check-formatted
       - run: mix ash.codegen --check
