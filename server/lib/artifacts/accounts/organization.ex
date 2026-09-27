@@ -8,11 +8,16 @@ defmodule Artifacts.Accounts.Organization do
   use Ash.Resource,
     domain: Artifacts.Accounts,
     data_layer: AshPostgres.DataLayer,
+    extensions: [AshJsonApi.Resource],
     authorizers: [Ash.Policy.Authorizer]
 
   postgres do
     table "organizations"
     repo Artifacts.Repo
+  end
+
+  json_api do
+    type "organization"
   end
 
   attributes do

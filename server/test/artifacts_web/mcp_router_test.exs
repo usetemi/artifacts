@@ -161,6 +161,34 @@ defmodule ArtifactsWeb.McpRouterTest do
       assert %{"current_version" => 1} = Jason.decode!(tool_text(result))
     end
 
+    test "the actor recorded for an MCP call is the BearerAuth actor with the Harness",
+         %{conn: conn} do
+      %{harness: harness, key: key} = with_harness(conn)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      create_result =
+        call_tool(conn, key, session_id, "publish_artifact", %{
+          "input" => %{"title" => "Board", "html" => "<p>hi</p>"}
+        })
+
+      %{"id" => artifact_id} = Jason.decode!(tool_text(create_result))
+
+      history_result =
+        call_tool(
+          conn,
+          key,
+          session_id,
+          "history",
+          %{"input" => %{"artifact_id" => artifact_id}},
+          4
+        )
+
+      assert [%{"actor" => %{"type" => "user", "harness" => harness_name}}] =
+               Jason.decode!(tool_text(history_result))
+
+      assert harness_name == harness.name
+    end
+
     test "publish_artifact publishes a new Version when artifact_id is present", %{conn: conn} do
       %{user: user, key: key} = with_harness(conn)
       artifact = artifact_fixture!(user)

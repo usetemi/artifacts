@@ -228,6 +228,37 @@ defmodule ArtifactsWeb.JsonApiTest do
     end
   end
 
+  describe "organizations" do
+    test "a Harness key lists only the organizations its User belongs to", %{conn: conn} do
+      user = user_fixture!()
+      key = harness_key(user)
+      own_organization = personal_organization!(user)
+
+      stranger = user_fixture!()
+      _stranger_organization = personal_organization!(stranger)
+
+      conn = conn |> authed(key) |> get("/api/organizations")
+
+      assert [%{"id" => id}] = json_response(conn, 200)["data"]
+      assert id == own_organization.id
+    end
+
+    test "an Agent key lists only its own organization", %{conn: conn} do
+      owner = user_fixture!()
+      organization = organization_fixture!(owner)
+      agent = agent_fixture!(organization, owner)
+      key = agent_key_fixture!(agent, owner).__metadata__.plaintext_api_key
+
+      other_owner = user_fixture!()
+      _other_organization = personal_organization!(other_owner)
+
+      conn = conn |> authed(key) |> get("/api/organizations")
+
+      assert [%{"id" => id}] = json_response(conn, 200)["data"]
+      assert id == organization.id
+    end
+  end
+
   describe "history" do
     test "returns every Event with what it describes", %{conn: conn} do
       user = user_fixture!()
