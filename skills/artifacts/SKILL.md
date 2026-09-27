@@ -50,7 +50,7 @@ the arguments the domain model itself pins.
 | `change_state` | Apply one batch of State ops together: `[{op: "set", path, value} \| {op: "delete", path}]`. Across calls, the last write to a path wins. |
 | `submit` | Hand the page back, with an optional payload. |
 | `wait` | Submissions made after a cursor; see below. |
-| `history` | One page of the Artifact's History after a cursor: each Event, with the Version, Submission, or ops it points at. |
+| `history` | One page of the Artifact's History after a cursor: each Event, with the Version (HTML only when you ask for it), Submission, or ops it points at. |
 | `rename_artifact` / `archive_artifact` / `unarchive_artifact` | Metadata and closeout. |
 
 **`publish_artifact`'s `if_version`.** To publish a new Version onto an
