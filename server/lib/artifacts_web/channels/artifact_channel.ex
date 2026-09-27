@@ -15,7 +15,7 @@ defmodule ArtifactsWeb.ArtifactChannel do
   use ArtifactsWeb, :channel
 
   alias Artifacts.Publishing
-  alias Artifacts.Publishing.{Actor, Errors}
+  alias Artifacts.Publishing.{Actor, Artifact, Errors}
   alias ArtifactsWeb.Presence
 
   @max_presence_meta_bytes 4096
@@ -33,7 +33,11 @@ defmodule ArtifactsWeb.ArtifactChannel do
   defp do_join(id, socket) do
     opts = actor_opts(socket)
 
-    with {:ok, artifact} <- Publishing.get_artifact(id, opts),
+    # The record itself, via the resource's own `:read`, not
+    # `Publishing.get_artifact` — that generic action returns a plain map
+    # of metadata (DESIGN.md's MCP/HTTP shape), not the Ash resource this
+    # channel later hands to `change_state`/`submit`/`publish`.
+    with {:ok, artifact} <- Ash.get(Artifact, id, opts),
          :ok <- ensure_open(artifact),
          {:ok, leaves} <- Publishing.get_leaves(id, opts) do
       send(self(), :after_join)

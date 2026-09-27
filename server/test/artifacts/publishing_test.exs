@@ -263,8 +263,8 @@ defmodule Artifacts.PublishingTest do
       assert {:ok, current} =
                Publishing.get_artifact(artifact.id, %{include_html: true}, actor: user)
 
-      assert current.__metadata__.version == 2
-      assert current.__metadata__.html == "<p>2</p>"
+      assert current.version == 2
+      assert current.html == "<p>2</p>"
     end
 
     test "returns an earlier version's html when asked", %{user: user} do
@@ -276,8 +276,8 @@ defmodule Artifacts.PublishingTest do
                  actor: user
                )
 
-      assert v1.__metadata__.version == 1
-      assert v1.__metadata__.html == html()
+      assert v1.version == 1
+      assert v1.html == html()
     end
 
     test "a nonexistent version resolves to not_found instead of raising", %{user: user} do
