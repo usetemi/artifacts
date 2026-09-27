@@ -36,16 +36,4 @@ defmodule ArtifactsWeb.ArtifactSocket do
   # to reach a User's sockets later.
   @impl true
   def id(_socket), do: nil
-
-  @doc """
-  The MFA predicate behind this socket's `check_origin` (set in
-  `ArtifactsWeb.Endpoint`): the content origin only, resolved at request
-  time since `ArtifactsWeb.Origins` reads runtime config. A literal list
-  written directly in `endpoint.ex` would instead be frozen at compile
-  time, into whichever environment happened to compile the release.
-  """
-  @spec check_origin?(URI.t()) :: boolean()
-  def check_origin?(%URI{} = uri) do
-    URI.to_string(uri) == ArtifactsWeb.Origins.content_origin()
-  end
 end

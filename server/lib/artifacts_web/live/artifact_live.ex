@@ -18,7 +18,7 @@ defmodule ArtifactsWeb.ArtifactLive do
 
   alias Artifacts.Publishing
   alias Artifacts.Publishing.{Artifact, Errors}
-  alias ArtifactsWeb.{PageToken, Presence}
+  alias ArtifactsWeb.{Origins, PageToken, Presence}
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -120,7 +120,7 @@ defmodule ArtifactsWeb.ArtifactLive do
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             phx-hook="ArtifactChrome"
             phx-update="ignore"
-            data-content-origin={content_origin()}
+            data-content-origin={Origins.content_origin()}
           />
           <form phx-submit="submit" class="chrome-submit" id="submit-form">
             <textarea name="note" class="textarea" placeholder="Optional note" rows="2"></textarea>
@@ -222,15 +222,10 @@ defmodule ArtifactsWeb.ArtifactLive do
   defp content_page_url(artifact_id, user_id) do
     token = PageToken.sign(artifact_id, user_id)
 
-    content_origin()
+    Origins.content_origin()
     |> URI.parse()
     |> Map.merge(%{path: "/a/#{artifact_id}/page", query: URI.encode_query(%{"t" => token})})
     |> URI.to_string()
-  end
-
-  defp content_origin do
-    content_host = Application.fetch_env!(:artifacts, :content_host)
-    URI.to_string(%{URI.parse(ArtifactsWeb.Endpoint.url()) | host: content_host})
   end
 
   defp error_message(error) do

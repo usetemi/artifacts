@@ -11,16 +11,24 @@ defmodule ArtifactsWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  # Both sockets check origin against ArtifactsWeb.Origins (an MFA, not a
+  # literal list, since the app/content hosts are runtime-configured and
+  # this module compiles once per release): the LiveView socket accepts
+  # only the app origin, the content host's page socket only the content
+  # origin — never the other one's.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [
+      check_origin: {ArtifactsWeb.Origins, :app_origin?, []},
+      connect_info: [session: @session_options]
+    ],
+    longpoll: [
+      check_origin: {ArtifactsWeb.Origins, :app_origin?, []},
+      connect_info: [session: @session_options]
+    ]
 
-  # The content host's page socket, checked against the content origin
-  # only (never the app origin) via an MFA, since the origin is
-  # runtime-configured and this module compiles once per release.
   socket "/socket", ArtifactsWeb.ArtifactSocket,
     websocket: [
-      check_origin: {ArtifactsWeb.ArtifactSocket, :check_origin?, []},
+      check_origin: {ArtifactsWeb.Origins, :content_origin?, []},
       # Connect params carry the page token (`t`); Phoenix.Logger would
       # otherwise log them on every connect.
       log: false

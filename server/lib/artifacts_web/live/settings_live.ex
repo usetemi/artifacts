@@ -348,7 +348,7 @@ defmodule ArtifactsWeb.SettingsLive do
 
   defp mcp_command(plaintext_key) do
     """
-    claude mcp add --transport http artifacts #{ArtifactsWeb.Endpoint.url()}/mcp \\
+    claude mcp add --transport http artifacts #{ArtifactsWeb.Origins.app_origin()}/mcp \\
       --header "Authorization: Bearer #{plaintext_key}"\
     """
   end

@@ -7,7 +7,10 @@ defmodule ArtifactsWeb.Origins do
   reflect the internal listener, not what the browser actually used.
 
   Used by `ArtifactsWeb.PageController` (the `window.__ARTIFACT__` payload
-  and the CSP) and `ArtifactsWeb.ArtifactSocket` (`check_origin`).
+  and the CSP), `ArtifactsWeb.ArtifactLive` (the iframe `src` and the
+  `claude mcp add` command in Settings), and both sockets' `check_origin`
+  (`ArtifactsWeb.Endpoint`): the LiveView socket checks `app_origin?/1`,
+  the content-host page socket checks `content_origin?/1`.
   """
 
   @spec app_origin() :: String.t()
@@ -15,6 +18,14 @@ defmodule ArtifactsWeb.Origins do
 
   @spec content_origin() :: String.t()
   def content_origin, do: origin(Application.fetch_env!(:artifacts, :content_host))
+
+  @doc "check_origin predicate for the app host's sockets (`/live`)."
+  @spec app_origin?(URI.t()) :: boolean()
+  def app_origin?(%URI{} = uri), do: URI.to_string(uri) == app_origin()
+
+  @doc "check_origin predicate for the content host's socket (`/socket`)."
+  @spec content_origin?(URI.t()) :: boolean()
+  def content_origin?(%URI{} = uri), do: URI.to_string(uri) == content_origin()
 
   @doc "The full `ws(s)://` URL of the content host's page socket, path included."
   @spec socket_url() :: String.t()

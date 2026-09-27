@@ -29,8 +29,10 @@ config :artifacts, ArtifactsWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
-  # Both hostnames must be allowed here too, matching runtime.exs, for when
-  # slice B's socket makes this check live.
+  # Endpoint-wide fallback only: the `/live` and `/socket` sockets each
+  # carry their own stricter check_origin (ArtifactsWeb.Origins), scoped to
+  # the app origin and the content origin respectively. This list is what
+  # any future socket without its own override would fall back to.
   check_origin: ["//localhost", "//127.0.0.1"],
   code_reloader: true,
   debug_errors: true,
