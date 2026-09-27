@@ -175,9 +175,9 @@ and shows who else is looking:
 
 ## Rules
 
-- Scripts and fonts may come from cdnjs, jsDelivr, unpkg, esm.sh, and
-  Google Fonts; every other request must stay on the content host that
-  serves the page. Inline everything else.
+- The page's CSP allows scripts from its own origin and the common CDNs,
+  and images from anywhere; every other connection is limited to the
+  socket host. Inline what none of those cover.
 - `wait` is the only way to wait; no polling loops.
 - The Artifact's Organization is the only protection: any Actor in it can
   view the page, change its State, submit, and publish over it. Put
