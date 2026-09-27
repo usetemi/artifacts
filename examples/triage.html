@@ -24,7 +24,9 @@
     <textarea id="notes" rows="3" placeholder="Notes for the agent"></textarea>
     <p class="peers" id="peers"></p>
 
-    <script>
+    <script type="module">
+      await artifact.ready;
+
       const columns = ["now", "next", "later"];
 
       function render(state) {
@@ -50,7 +52,10 @@
 
       document.getElementById("columns").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-id]");
-        if (button) artifact.state.set(`cards.${button.dataset.id}.column`, button.dataset.column);
+        if (!button) return;
+        artifact.state
+          .set(`cards.${button.dataset.id}.column`, button.dataset.column)
+          .catch(({ code }) => alert(code === "archived" ? "This board is archived." : `Move failed: ${code}`));
       });
 
       document.getElementById("notes").addEventListener("change", (event) => {
@@ -60,8 +65,9 @@
       artifact.state.subscribe(render);
 
       artifact.presence.onChange((viewers) => {
+        const others = viewers.filter((viewer) => viewer.id !== artifact.viewer.id);
         document.getElementById("peers").textContent =
-          viewers.length === 1 ? "You are the only viewer." : `${viewers.length} people are viewing this board.`;
+          others.length === 0 ? "You are the only viewer." : `Also here: ${others.map((viewer) => viewer.name).join(", ")}.`;
       });
     </script>
   </body>

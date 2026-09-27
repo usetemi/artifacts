@@ -1,17 +1,23 @@
-// The page runtime: `window.artifact`, injected by the host before the
-// page's own scripts. One channel per page carries state ops, presence,
-// broadcast, submit, and publish. The page keeps rendering from its
-// last known state whenever the connection is down; a rejoin replaces
-// the cache with a fresh snapshot, so nothing missed offline is lost.
+// The page runtime: `window.artifact`, injected by the host right after
+// `<head>`, before the page's own scripts. One channel per page carries
+// state ops, presence, broadcast, submit, and publish. The page keeps
+// rendering from its last known state whenever the connection is down; a
+// rejoin replaces the cache with a fresh snapshot, so nothing missed
+// offline is lost.
 
 import {Socket, Presence} from "phoenix"
 import {applyOps, expand, get} from "./state"
+import {isTokenReply, tokenRequestMessage} from "./token_message"
 
-const script = document.currentScript
-const artifactId = script.dataset.artifactId
-let version = Number(script.dataset.version)
+const data = window.__ARTIFACT__
+const artifactId = data.id
+const appOrigin = data.appOrigin
+const viewer = Object.freeze({id: data.viewer.id, name: data.viewer.name})
 
-const viewer = loadViewer()
+let version = data.version
+let currentToken = data.token
+let tokenMintedAt = Date.now()
+
 let leaves = {}
 let expanded = null
 let joined = false
@@ -19,14 +25,38 @@ let stateListeners = new Set()
 let presenceListeners = new Set()
 let topicListeners = new Map()
 let frame = null
+let pendingMeta = {}
 
-const socket = new Socket("/socket", {})
-const channel = socket.channel(`artifact:${artifactId}`, () => ({viewer_id: viewer.id}))
+// The runtime asks for a fresh token before a reconnect that would
+// otherwise carry one older than this.
+const TOKEN_REFRESH_AFTER_MS = 9 * 60 * 1000
+const DEFAULT_RECONNECT_STEPS_MS = [10, 50, 100, 150, 200, 250, 500, 1000, 2000]
+
+function requestTokenRefresh() {
+  if (window.parent === window) return
+  window.parent.postMessage(tokenRequestMessage(artifactId), appOrigin)
+}
+
+window.addEventListener("message", (event) => {
+  if (!isTokenReply(event, {appOrigin, parentWindow: window.parent})) return
+  currentToken = event.data.token
+  tokenMintedAt = Date.now()
+})
+
+const socket = new Socket(data.socketUrl, {
+  params: () => ({t: currentToken}),
+  reconnectAfterMs: (tries) => {
+    if (Date.now() - tokenMintedAt > TOKEN_REFRESH_AFTER_MS) requestTokenRefresh()
+    return DEFAULT_RECONNECT_STEPS_MS[tries - 1] || 5000
+  },
+})
+const channel = socket.channel(`artifact:${artifactId}`)
 const presence = new Presence(channel)
 
 let resolveReady
 const ready = new Promise((resolve) => (resolveReady = resolve))
 
+socket.onError(() => requestTokenRefresh())
 channel.onError(() => (joined = false))
 channel.onClose(() => (joined = false))
 
@@ -84,7 +114,7 @@ function push(event, payload) {
     channel
       .push(event, payload)
       .receive("ok", (reply) => resolve(reply ?? {}))
-      .receive("error", (reply) => reject(error(reply?.reason ?? "error", reply?.reason ?? "request failed")))
+      .receive("error", (reply) => reject(error(reply?.error ?? "error", reply?.error ?? "request failed")))
       .receive("timeout", () => reject(error("unavailable", "request timed out")))
   })
 }
@@ -93,30 +123,8 @@ function error(code, message) {
   return {code, message}
 }
 
-let pendingMeta = {}
-
 function listPresence() {
-  return presence.list((id, {metas: [first]}) => ({
-    viewer: {id},
-    meta: first.meta ?? {},
-  }))
-}
-
-// A viewer is a browser: the id lives in that browser's storage, so the
-// same person on the same machine is the same viewer across artifacts
-// and the history can tell viewers apart without any account.
-function loadViewer() {
-  let id = null
-  try {
-    id = localStorage.getItem("artifacts.viewer_id")
-    if (!id) {
-      id = "v_" + Math.random().toString(36).slice(2, 12)
-      localStorage.setItem("artifacts.viewer_id", id)
-    }
-  } catch {
-    id = id ?? "v_" + Math.random().toString(36).slice(2, 12)
-  }
-  return {id}
+  return presence.list((id, {metas: [first]}) => ({id, name: first.name, ...first.meta}))
 }
 
 const artifact = {
@@ -127,11 +135,7 @@ const artifact = {
     return version
   },
   ready,
-  viewer: {
-    get id() {
-      return viewer.id
-    },
-  },
+  viewer,
   state: {
     get(path) {
       const state = currentState()

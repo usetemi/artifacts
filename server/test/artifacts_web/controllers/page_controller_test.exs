@@ -1,40 +1,132 @@
 defmodule ArtifactsWeb.PageControllerTest do
   use ArtifactsWeb.ConnCase, async: false
 
-  alias Artifacts.Store
-  alias ArtifactsWeb.PageController
+  import Artifacts.AccountsFixtures
+  import Artifacts.PublishingFixtures
 
-  test "the root is not a gallery", %{conn: conn} do
-    assert text_response(get(conn, ~p"/"), 200) == "artifacts host\n"
+  alias Artifacts.Publishing
+  alias ArtifactsWeb.{PageController, PageToken}
+
+  setup %{conn: conn} do
+    user = user_fixture!()
+    artifact = artifact_fixture!(user)
+    %{conn: Map.put(conn, :host, "127.0.0.1"), user: user, artifact: artifact}
   end
 
-  test "a page is served as published, with the runtime injected and a CSP", %{conn: conn} do
-    html = "<!doctype html><html><head><title>t</title></head><body>hi</body></html>"
-    {:ok, artifact} = Store.create(%{title: "T", html: html})
-
-    conn = get(conn, ~p"/a/#{artifact.id}/page")
+  test "serves the current Version with window.__ARTIFACT__, the runtime, and a CSP", %{
+    conn: conn,
+    user: user,
+    artifact: artifact
+  } do
+    token = PageToken.sign(artifact.id, user.id)
+    conn = get(conn, ~p"/a/#{artifact.id}/page?t=#{token}")
     body = html_response(conn, 200)
 
+    assert [_, json] = Regex.run(~r/window\.__ARTIFACT__ = (.*?)<\/script>/s, body)
+    payload = Jason.decode!(json)
+
+    endpoint_port = ArtifactsWeb.Endpoint.struct_url().port
+
+    assert payload == %{
+             "id" => artifact.id,
+             "version" => 1,
+             "token" => token,
+             "socketUrl" => "ws://127.0.0.1:#{endpoint_port}/socket",
+             "appOrigin" => "http://localhost:#{endpoint_port}",
+             "viewer" => %{"id" => user.id, "name" => user.name}
+           }
+
     assert body =~
-             ~s(<head><script src="/assets/js/runtime.js" data-artifact-id="#{artifact.id}" data-version="1"></script><title>t</title>)
+             ~s(<script src="http://127.0.0.1:#{endpoint_port}/assets/js/runtime.js"></script>)
 
-    assert body =~ "<body>hi</body>"
+    assert body =~ "<h1>Hi</h1>"
+
     assert [csp] = get_resp_header(conn, "content-security-policy")
-    assert csp =~ "connect-src 'self'"
+    assert csp =~ "frame-ancestors http://localhost:#{endpoint_port}"
+    assert csp =~ "connect-src 'self' ws://127.0.0.1:#{endpoint_port}"
+
     assert get_resp_header(conn, "cache-control") == ["no-store"]
-    assert {:ok, %{html: ^html}} = Store.current_version(artifact.id)
+    assert get_resp_header(conn, "referrer-policy") == ["no-referrer"]
   end
 
-  test "a page without a head gets the runtime first" do
-    assert PageController.inject_runtime("<p>x</p>", "id1", 3) ==
-             ~s(<script src="/assets/js/runtime.js" data-artifact-id="id1" data-version="3"></script><p>x</p>)
+  test "a page without a head still gets the runtime injected first" do
+    artifact = %Artifacts.Publishing.Artifact{id: "id1", current_version: 3}
+    user = %Artifacts.Accounts.User{id: Ecto.UUID.generate(), name: "Ann"}
+
+    result = PageController.inject_runtime("<p>x</p>", artifact, "tok", user)
+
+    assert result =~
+             ~r/^<script>window\.__ARTIFACT__ = \{.*\}<\/script><script src="[^"]+"><\/script><p>x<\/p>$/
   end
 
-  test "unknown and archived pages are 404", %{conn: conn} do
-    assert text_response(get(conn, ~p"/a/missing/page"), 404)
+  test "escapes </ in the injected JSON so page content can't close the script tag" do
+    artifact = %Artifacts.Publishing.Artifact{id: "abc", current_version: 1}
+    user = %Artifacts.Accounts.User{id: Ecto.UUID.generate(), name: "</script><script>evil()"}
 
-    {:ok, artifact} = Store.create(%{title: "T", html: "<p>x</p>"})
-    {:ok, _} = Store.archive(artifact.id)
-    assert text_response(get(conn, ~p"/a/#{artifact.id}/page"), 404)
+    result = PageController.inject_runtime("<head></head>", artifact, "tok", user)
+
+    refute result =~ "</script><script>evil()"
+    assert result =~ "<\\/script><script>evil()"
+  end
+
+  test "the page route 404s on the app host", %{user: user, artifact: artifact} do
+    token = PageToken.sign(artifact.id, user.id)
+    conn = build_conn() |> Map.put(:host, "localhost")
+
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=#{token}") end
+  end
+
+  test "an unknown artifact id is refused", %{conn: conn} do
+    assert_error_sent 404, fn -> get(conn, ~p"/a/missing/page?t=not-a-real-token") end
+  end
+
+  test "a tampered token is refused", %{conn: conn, artifact: artifact} do
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=not-a-real-token") end
+  end
+
+  test "an expired token is refused", %{conn: conn, user: user, artifact: artifact} do
+    token =
+      Phoenix.Token.sign(
+        ArtifactsWeb.Endpoint,
+        "artifact page v1",
+        %{artifact_id: artifact.id, user_id: user.id},
+        signed_at: System.system_time(:second) - 601
+      )
+
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=#{token}") end
+  end
+
+  test "a token minted for a different artifact is refused", %{
+    conn: conn,
+    user: user,
+    artifact: artifact
+  } do
+    other = artifact_fixture!(user)
+    token = PageToken.sign(other.id, user.id)
+
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=#{token}") end
+  end
+
+  test "a non-member's token is refused", %{conn: conn, artifact: artifact} do
+    stranger = user_fixture!()
+    token = PageToken.sign(artifact.id, stranger.id)
+
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=#{token}") end
+  end
+
+  test "a missing token is refused", %{conn: conn, artifact: artifact} do
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page") end
+  end
+
+  test "an archived artifact's page is refused", %{conn: conn, user: user, artifact: artifact} do
+    token = PageToken.sign(artifact.id, user.id)
+    {:ok, _} = Publishing.archive(artifact, actor: user)
+
+    assert_error_sent 404, fn -> get(conn, ~p"/a/#{artifact.id}/page?t=#{token}") end
+  end
+
+  test "the route logs no parameters, so the token never reaches a request log" do
+    assert %{log: false} =
+             Phoenix.Router.route_info(ArtifactsWeb.Router, "GET", "/a/xyz/page", "127.0.0.1")
   end
 end

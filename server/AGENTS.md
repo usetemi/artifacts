@@ -20,8 +20,70 @@ custom classes must fully style the input
 
 
 <!-- usage-rules-start -->
+<!-- usage_rules-start -->
+## usage_rules usage
+_A config-driven dev tool for Elixir projects to manage AGENTS.md files and agent skills from dependencies_
 
+## Using Usage Rules
+
+Many packages have usage rules, which you should *thoroughly* consult before taking any
+action. These usage rules contain guidelines and rules *directly from the package authors*.
+They are your best source of knowledge for making decisions.
+
+## Modules & functions in the current app and dependencies
+
+When looking for docs for modules & functions that are dependencies of the current project,
+or for Elixir itself, use `mix usage_rules.docs`
+
+```
+# Search a whole module
+mix usage_rules.docs Enum
+
+# Search a specific function
+mix usage_rules.docs Enum.zip
+
+# Search a specific function & arity
+mix usage_rules.docs Enum.zip/1
+```
+
+
+## Searching Documentation
+
+You should also consult the documentation of any tools you are using, early and often. The best 
+way to accomplish this is to use the `usage_rules.search_docs` mix task. Once you have
+found what you are looking for, use the links in the search results to get more detail. For example:
+
+```
+# Search docs for all packages in the current application, including Elixir
+mix usage_rules.search_docs Enum.zip
+
+# Search docs for specific packages
+mix usage_rules.search_docs Req.get -p req
+
+# Search docs for multi-word queries
+mix usage_rules.search_docs "making requests" -p req
+
+# Search only in titles (useful for finding specific functions/modules)
+mix usage_rules.search_docs "Enum.zip" --query-by title
+```
+
+
+<!-- usage_rules-end -->
+<!-- phoenix:ecto-start -->
+## phoenix:ecto usage
+## Ecto Guidelines
+
+- **Always** preload Ecto associations in queries when they'll be accessed in templates, ie a message that needs to reference the `message.user.email`
+- Remember `import Ecto.Query` and other supporting modules when you write `seeds.exs`
+- `Ecto.Schema` fields always use the `:string` type, even for `:text`, columns, ie: `field :name, :string`
+- `Ecto.Changeset.validate_number/2` **DOES NOT SUPPORT the `:allow_nil` option**. By default, Ecto validations only run if a change for the given field exists and the change value is not nil, so such as option is never needed
+- You **must** use `Ecto.Changeset.get_field(changeset, :field)` to access changeset fields
+- Fields which are set programmatically, such as `user_id`, must not be listed in `cast` calls or similar for security purposes. Instead they must be explicitly set when creating the struct
+- **Always** invoke `mix ecto.gen.migration migration_name_using_underscores` when generating migration files, so the correct timestamp and conventions are applied
+
+<!-- phoenix:ecto-end -->
 <!-- phoenix:elixir-start -->
+## phoenix:elixir usage
 ## Elixir guidelines
 
 - Elixir lists **do not support index based access via the access syntax**
@@ -76,39 +138,11 @@ custom classes must fully style the input
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
 
    - Instead of sleeping to synchronize before the next call, **always** use `_ = :sys.get_state/1` to ensure the process has handled prior messages
+
+
 <!-- phoenix:elixir-end -->
-
-<!-- phoenix:phoenix-start -->
-## Phoenix guidelines
-
-- Remember Phoenix router `scope` blocks include an optional alias which is prefixed for all routes within the scope. **Always** be mindful of this when creating routes within a scope to avoid duplicate module prefixes.
-
-- You **never** need to create your own `alias` for route definitions! The `scope` provides the alias, ie:
-
-      scope "/admin", AppWeb.Admin do
-        pipe_through :browser
-
-        live "/users", UserLive, :index
-      end
-
-  the UserLive route would point to the `AppWeb.Admin.UserLive` module
-
-- `Phoenix.View` no longer is needed or included with Phoenix, don't use it
-<!-- phoenix:phoenix-end -->
-
-<!-- phoenix:ecto-start -->
-## Ecto Guidelines
-
-- **Always** preload Ecto associations in queries when they'll be accessed in templates, ie a message that needs to reference the `message.user.email`
-- Remember `import Ecto.Query` and other supporting modules when you write `seeds.exs`
-- `Ecto.Schema` fields always use the `:string` type, even for `:text`, columns, ie: `field :name, :string`
-- `Ecto.Changeset.validate_number/2` **DOES NOT SUPPORT the `:allow_nil` option**. By default, Ecto validations only run if a change for the given field exists and the change value is not nil, so such as option is never needed
-- You **must** use `Ecto.Changeset.get_field(changeset, :field)` to access changeset fields
-- Fields which are set programmatically, such as `user_id`, must not be listed in `cast` calls or similar for security purposes. Instead they must be explicitly set when creating the struct
-- **Always** invoke `mix ecto.gen.migration migration_name_using_underscores` when generating migration files, so the correct timestamp and conventions are applied
-<!-- phoenix:ecto-end -->
-
 <!-- phoenix:html-start -->
+## phoenix:html usage
 ## Phoenix HTML guidelines
 
 - Phoenix templates **always** use `~H` or .html.heex files (known as HEEx), **never** use `~E`
@@ -185,9 +219,10 @@ custom classes must fully style the input
         {if @invalid_block_construct do}
         {end}
       </div>
-<!-- phoenix:html-end -->
 
+<!-- phoenix:html-end -->
 <!-- phoenix:liveview-start -->
+## phoenix:liveview usage
 ## Phoenix LiveView guidelines
 
 - **Never** use the deprecated `live_redirect` and `live_patch` functions, instead **always** use the `<.link navigate={href}>` and  `<.link patch={href}>` in templates, and `push_navigate` and `push_patch` functions LiveViews
@@ -419,6 +454,177 @@ And **never** do this:
 
 - You are FORBIDDEN from accessing the changeset in the template as it will cause errors
 - **Never** use `<.form let={f} ...>` in the template, instead **always use `<.form for={@form} ...>`**, then drive all form references from the form assign as in `@form[:field]`. The UI should **always** be driven by a `to_form/2` assigned in the LiveView module that is derived from a changeset
-<!-- phoenix:liveview-end -->
 
+<!-- phoenix:liveview-end -->
+<!-- phoenix:phoenix-start -->
+## phoenix:phoenix usage
+## Phoenix guidelines
+
+- Remember Phoenix router `scope` blocks include an optional alias which is prefixed for all routes within the scope. **Always** be mindful of this when creating routes within a scope to avoid duplicate module prefixes.
+
+- You **never** need to create your own `alias` for route definitions! The `scope` provides the alias, ie:
+
+      scope "/admin", AppWeb.Admin do
+        pipe_through :browser
+
+        live "/users", UserLive, :index
+      end
+
+  the UserLive route would point to the `AppWeb.Admin.UserLive` module
+
+- `Phoenix.View` no longer is needed or included with Phoenix, don't use it
+
+<!-- phoenix:phoenix-end -->
+<!-- ash-start -->
+## ash usage
+_A declarative, extensible framework for building Elixir applications._
+
+[ash usage rules](deps/ash/usage-rules.md)
+<!-- ash-end -->
+<!-- ash:actions-start -->
+## ash:actions usage
+[ash:actions usage rules](deps/ash/usage-rules/actions.md)
+<!-- ash:actions-end -->
+<!-- ash:aggregates-start -->
+## ash:aggregates usage
+[ash:aggregates usage rules](deps/ash/usage-rules/aggregates.md)
+<!-- ash:aggregates-end -->
+<!-- ash:authorization-start -->
+## ash:authorization usage
+[ash:authorization usage rules](deps/ash/usage-rules/authorization.md)
+<!-- ash:authorization-end -->
+<!-- ash:calculations-start -->
+## ash:calculations usage
+[ash:calculations usage rules](deps/ash/usage-rules/calculations.md)
+<!-- ash:calculations-end -->
+<!-- ash:code_interfaces-start -->
+## ash:code_interfaces usage
+[ash:code_interfaces usage rules](deps/ash/usage-rules/code_interfaces.md)
+<!-- ash:code_interfaces-end -->
+<!-- ash:code_structure-start -->
+## ash:code_structure usage
+[ash:code_structure usage rules](deps/ash/usage-rules/code_structure.md)
+<!-- ash:code_structure-end -->
+<!-- ash:data_layers-start -->
+## ash:data_layers usage
+[ash:data_layers usage rules](deps/ash/usage-rules/data_layers.md)
+<!-- ash:data_layers-end -->
+<!-- ash:exist_expressions-start -->
+## ash:exist_expressions usage
+[ash:exist_expressions usage rules](deps/ash/usage-rules/exist_expressions.md)
+<!-- ash:exist_expressions-end -->
+<!-- ash:generating_code-start -->
+## ash:generating_code usage
+[ash:generating_code usage rules](deps/ash/usage-rules/generating_code.md)
+<!-- ash:generating_code-end -->
+<!-- ash:migrations-start -->
+## ash:migrations usage
+[ash:migrations usage rules](deps/ash/usage-rules/migrations.md)
+<!-- ash:migrations-end -->
+<!-- ash:query_filter-start -->
+## ash:query_filter usage
+[ash:query_filter usage rules](deps/ash/usage-rules/query_filter.md)
+<!-- ash:query_filter-end -->
+<!-- ash:querying_data-start -->
+## ash:querying_data usage
+[ash:querying_data usage rules](deps/ash/usage-rules/querying_data.md)
+<!-- ash:querying_data-end -->
+<!-- ash:relationships-start -->
+## ash:relationships usage
+[ash:relationships usage rules](deps/ash/usage-rules/relationships.md)
+<!-- ash:relationships-end -->
+<!-- ash:testing-start -->
+## ash:testing usage
+[ash:testing usage rules](deps/ash/usage-rules/testing.md)
+<!-- ash:testing-end -->
+<!-- ash_ai-start -->
+## ash_ai usage
+_Integrated LLM features for your Ash application._
+
+[ash_ai usage rules](deps/ash_ai/usage-rules.md)
+<!-- ash_ai-end -->
+<!-- ash_authentication-start -->
+## ash_authentication usage
+_Authentication extension for the Ash Framework._
+
+[ash_authentication usage rules](deps/ash_authentication/usage-rules.md)
+<!-- ash_authentication-end -->
+<!-- ash_json_api-start -->
+## ash_json_api usage
+_The JSON:API extension for the Ash Framework._
+
+[ash_json_api usage rules](deps/ash_json_api/usage-rules.md)
+<!-- ash_json_api-end -->
+<!-- ash_phoenix-start -->
+## ash_phoenix usage
+_Utilities for integrating Ash and Phoenix_
+
+[ash_phoenix usage rules](deps/ash_phoenix/usage-rules.md)
+<!-- ash_phoenix-end -->
+<!-- ash_phoenix:best_practices-start -->
+## ash_phoenix:best_practices usage
+[ash_phoenix:best_practices usage rules](deps/ash_phoenix/usage-rules/best_practices.md)
+<!-- ash_phoenix:best_practices-end -->
+<!-- ash_phoenix:debugging_form_submissions-start -->
+## ash_phoenix:debugging_form_submissions usage
+[ash_phoenix:debugging_form_submissions usage rules](deps/ash_phoenix/usage-rules/debugging_form_submissions.md)
+<!-- ash_phoenix:debugging_form_submissions-end -->
+<!-- ash_phoenix:error_handling-start -->
+## ash_phoenix:error_handling usage
+[ash_phoenix:error_handling usage rules](deps/ash_phoenix/usage-rules/error_handling.md)
+<!-- ash_phoenix:error_handling-end -->
+<!-- ash_phoenix:form_integration-start -->
+## ash_phoenix:form_integration usage
+[ash_phoenix:form_integration usage rules](deps/ash_phoenix/usage-rules/form_integration.md)
+<!-- ash_phoenix:form_integration-end -->
+<!-- ash_phoenix:nested_forms-start -->
+## ash_phoenix:nested_forms usage
+[ash_phoenix:nested_forms usage rules](deps/ash_phoenix/usage-rules/nested_forms.md)
+<!-- ash_phoenix:nested_forms-end -->
+<!-- ash_phoenix:union_forms-start -->
+## ash_phoenix:union_forms usage
+[ash_phoenix:union_forms usage rules](deps/ash_phoenix/usage-rules/union_forms.md)
+<!-- ash_phoenix:union_forms-end -->
+<!-- ash_postgres-start -->
+## ash_postgres usage
+_The PostgreSQL data layer for Ash Framework_
+
+[ash_postgres usage rules](deps/ash_postgres/usage-rules.md)
+<!-- ash_postgres-end -->
+<!-- ash_postgres:advanced_features-start -->
+## ash_postgres:advanced_features usage
+[ash_postgres:advanced_features usage rules](deps/ash_postgres/usage-rules/advanced_features.md)
+<!-- ash_postgres:advanced_features-end -->
+<!-- ash_postgres:best_practices-start -->
+## ash_postgres:best_practices usage
+[ash_postgres:best_practices usage rules](deps/ash_postgres/usage-rules/best_practices.md)
+<!-- ash_postgres:best_practices-end -->
+<!-- ash_postgres:check_constraints-start -->
+## ash_postgres:check_constraints usage
+[ash_postgres:check_constraints usage rules](deps/ash_postgres/usage-rules/check_constraints.md)
+<!-- ash_postgres:check_constraints-end -->
+<!-- ash_postgres:configuration-start -->
+## ash_postgres:configuration usage
+[ash_postgres:configuration usage rules](deps/ash_postgres/usage-rules/configuration.md)
+<!-- ash_postgres:configuration-end -->
+<!-- ash_postgres:custom_indexes-start -->
+## ash_postgres:custom_indexes usage
+[ash_postgres:custom_indexes usage rules](deps/ash_postgres/usage-rules/custom_indexes.md)
+<!-- ash_postgres:custom_indexes-end -->
+<!-- ash_postgres:custom_sql_statements-start -->
+## ash_postgres:custom_sql_statements usage
+[ash_postgres:custom_sql_statements usage rules](deps/ash_postgres/usage-rules/custom_sql_statements.md)
+<!-- ash_postgres:custom_sql_statements-end -->
+<!-- ash_postgres:foreign_keys-start -->
+## ash_postgres:foreign_keys usage
+[ash_postgres:foreign_keys usage rules](deps/ash_postgres/usage-rules/foreign_keys.md)
+<!-- ash_postgres:foreign_keys-end -->
+<!-- ash_postgres:migrations-start -->
+## ash_postgres:migrations usage
+[ash_postgres:migrations usage rules](deps/ash_postgres/usage-rules/migrations.md)
+<!-- ash_postgres:migrations-end -->
+<!-- ash_postgres:multitenancy-start -->
+## ash_postgres:multitenancy usage
+[ash_postgres:multitenancy usage rules](deps/ash_postgres/usage-rules/multitenancy.md)
+<!-- ash_postgres:multitenancy-end -->
 <!-- usage-rules-end -->

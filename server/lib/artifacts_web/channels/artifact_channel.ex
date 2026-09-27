@@ -1,116 +1,137 @@
 defmodule ArtifactsWeb.ArtifactChannel do
   @moduledoc """
-  The one connection a page holds: `artifact:<id>`.
-
-  The join reply is a snapshot (`version` and the flat `state` leaves).
-  After that the channel relays the store's PubSub messages as pushes
-  (`state:ops`, `version`, `submission`) and accepts the page's writes,
-  each of which goes through `Artifacts.Store` so the CLI and other pages
-  learn about it the same way. Presence and `broadcast` never touch
+  The one connection a page holds: `artifact:<id>` (DESIGN.md "Channel
+  protocol"). The join reply is a snapshot (`version` and the flat `state`
+  leaves, from `Publishing.get_leaves` — not `get_state`'s nested object,
+  since this is what `state:ops` reapplies against on the wire); after
+  that this channel relays `Artifacts.Publishing.ChannelNotifier`'s
+  broadcasts as pushes (`state:ops`, `version` — never `submission`,
+  which the chrome learns of from the same PubSub topic directly) and
+  calls the same `Artifacts.Publishing` actions MCP and HTTP call, with
+  the token's User as actor. Presence and `broadcast` never touch
   storage; they exist only while the page is open.
   """
 
   use ArtifactsWeb, :channel
 
-  alias Artifacts.Store
+  alias Artifacts.Publishing
+  alias Artifacts.Publishing.{Actor, Artifact, Errors}
   alias ArtifactsWeb.Presence
 
-  @max_viewer_id_bytes 64
+  @max_presence_meta_bytes 4096
 
   @impl true
-  def join("artifact:" <> id, params, socket) do
-    with {:ok, artifact} <- Store.get_open(id),
-         {:ok, viewer_id} <- viewer_id(params) do
-      send(self(), :after_join)
-
-      socket =
-        assign(socket, artifact_id: id, viewer_id: viewer_id, by: Store.viewer(viewer_id))
-
-      {:ok, %{version: artifact.current_version, state: Store.leaves(id)}, socket}
+  def join("artifact:" <> id, _params, socket) do
+    if id == socket.assigns.artifact_id do
+      do_join(id, socket)
     else
-      {:error, :not_found} ->
-        {:error, %{reason: "not_found"}}
-
-      {:error, :archived} ->
-        {:error, %{reason: "archived"}}
-
-      {:error, :viewer_id} ->
-        {:error, %{reason: "viewer_id must be a string of at most 64 bytes"}}
+      # A token minted for a different artifact than this topic names.
+      {:error, %{error: "not_found"}}
     end
   end
 
+  defp do_join(id, socket) do
+    opts = actor_opts(socket)
+
+    # The record itself, via the resource's own `:read`, not
+    # `Publishing.get_artifact` — that generic action returns a plain map
+    # of metadata (DESIGN.md's MCP/HTTP shape), not the Ash resource this
+    # channel later hands to `change_state`/`submit`/`publish`.
+    with {:ok, artifact} <- Ash.get(Artifact, id, opts),
+         :ok <- ensure_open(artifact),
+         {:ok, leaves} <- Publishing.get_leaves(id, opts) do
+      send(self(), :after_join)
+
+      {:ok, %{version: artifact.current_version, state: leaves},
+       assign(socket, :artifact, artifact)}
+    else
+      {:error, :archived} -> {:error, %{error: "archived"}}
+      {:error, error} -> {:error, %{error: Errors.to_code(error)}}
+    end
+  end
+
+  defp ensure_open(%{archived_at: nil}), do: :ok
+  defp ensure_open(_archived_artifact), do: {:error, :archived}
+
   @impl true
   def handle_info(:after_join, socket) do
-    {:ok, _ref} = Presence.track(socket, socket.assigns.viewer_id, %{meta: %{}})
+    {:ok, _ref} =
+      Presence.track(socket, presence_key(socket), %{name: socket.assigns.actor.name, meta: %{}})
+
     push(socket, "presence_state", Presence.list(socket))
     {:noreply, socket}
   end
 
-  def handle_info({:state_ops, ops, by}, socket) do
-    push(socket, "state:ops", %{ops: ops, by: by})
-    {:noreply, socket}
-  end
-
-  def handle_info({:version, number, by}, socket) do
+  def handle_info({:version, %{version: number, by: by}}, socket) do
     push(socket, "version", %{version: number, by: by})
     {:noreply, socket}
   end
 
-  def handle_info({:submission, submission}, socket) do
-    push(socket, "submission", %{id: submission.id, viewer_id: submission.viewer_id})
+  def handle_info({:state_ops, %{ops: ops, by: by}}, socket) do
+    push(socket, "state:ops", %{ops: ops, by: by})
     {:noreply, socket}
   end
 
+  # No `submission` push reaches pages (DESIGN.md's channel protocol
+  # table has no such row): the chrome subscribes to this same topic
+  # directly for that instead. Still received here since every joined
+  # channel process is subscribed to the whole topic.
+  def handle_info({:submission, _payload}, socket), do: {:noreply, socket}
+
   @impl true
   def handle_in("state:ops", %{"ops" => ops}, socket) do
-    case Store.apply_ops(socket.assigns.artifact_id, ops, socket.assigns.by) do
-      {:ok, _ops} -> {:reply, :ok, socket}
-      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
+    case Publishing.change_state(socket.assigns.artifact, ops, actor_opts(socket)) do
+      {:ok, _artifact} -> {:reply, :ok, socket}
+      {:error, error} -> {:reply, {:error, %{error: Errors.to_code(error)}}, socket}
     end
   end
 
   def handle_in("presence:update", %{"meta" => meta}, socket) when is_map(meta) do
-    {:ok, _ref} =
-      Presence.update(socket, socket.assigns.viewer_id, fn current ->
-        %{current | meta: Map.merge(current.meta, meta)}
-      end)
+    if byte_size(Jason.encode!(meta)) > @max_presence_meta_bytes do
+      {:reply, {:error, %{error: "invalid"}}, socket}
+    else
+      {:ok, _ref} = Presence.update(socket, presence_key(socket), &%{&1 | meta: meta})
+      {:reply, :ok, socket}
+    end
+  end
 
-    {:reply, :ok, socket}
+  def handle_in("presence:update", _params, socket) do
+    {:reply, {:error, %{error: "invalid"}}, socket}
   end
 
   def handle_in("broadcast", %{"topic" => topic, "data" => data}, socket) when is_binary(topic) do
     broadcast_from!(socket, "broadcast", %{
       topic: topic,
       data: data,
-      from: %{viewer: %{id: socket.assigns.viewer_id}}
+      from: Actor.ref(socket.assigns.actor, %{})
     })
 
     {:noreply, socket}
   end
 
   def handle_in("submit", params, socket) do
-    case Store.submit(socket.assigns.artifact_id, params["payload"], socket.assigns.viewer_id) do
-      {:ok, submission} -> {:reply, {:ok, %{id: submission.id}}, socket}
-      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
+    payload = Map.get(params, "payload")
+
+    case Publishing.submit(socket.assigns.artifact, payload, actor_opts(socket)) do
+      {:ok, artifact} -> {:reply, {:ok, %{id: artifact.__metadata__.submission_id}}, socket}
+      {:error, error} -> {:reply, {:error, %{error: Errors.to_code(error)}}, socket}
     end
   end
 
   def handle_in("publish", %{"html" => html} = params, socket) do
-    opts = [by: socket.assigns.by] ++ if_version(params)
+    if_version = Map.get(params, "if_version")
 
-    case Store.publish(socket.assigns.artifact_id, html, opts) do
-      {:ok, number} -> {:reply, {:ok, %{version: number}}, socket}
-      {:error, reason} -> {:reply, {:error, %{reason: to_string(reason)}}, socket}
+    case Publishing.publish(socket.assigns.artifact, html, if_version, actor_opts(socket)) do
+      {:ok, artifact} -> {:reply, {:ok, %{version: artifact.current_version}}, socket}
+      {:error, error} -> {:reply, {:error, %{error: Errors.to_code(error)}}, socket}
     end
   end
 
-  defp if_version(%{"if_version" => number}) when is_integer(number), do: [if_version: number]
-  defp if_version(_params), do: []
+  defp presence_key(socket), do: to_string(socket.assigns.actor.id)
 
-  defp viewer_id(%{"viewer_id" => id})
-       when is_binary(id) and id != "" and byte_size(id) <= @max_viewer_id_bytes do
-    {:ok, id}
+  # Only Users open this socket (ArtifactSocket's own doc), so no Harness
+  # ever attributes a write made through it.
+  defp actor_opts(socket) do
+    [actor: socket.assigns.actor, context: %{shared: %{harness_id: nil, harness_name: nil}}]
   end
-
-  defp viewer_id(_params), do: {:error, :viewer_id}
 end

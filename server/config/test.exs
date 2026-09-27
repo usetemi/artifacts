@@ -1,5 +1,16 @@
 import Config
 
+config :artifacts,
+  app_host: "localhost",
+  content_host: "127.0.0.1",
+  token_signing_secret: "test_only_signing_secret_do_not_use_in_production_0000",
+  # Never dials out in tests; just lets the Google strategy's config
+  # resolve, so a callback with no prior session fails on that instead of
+  # on a missing secret.
+  google_client_id: "test-google-client-id",
+  google_client_secret: "test-google-client-secret",
+  google_redirect_uri: "http://localhost:4002/auth/user/google/callback"
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

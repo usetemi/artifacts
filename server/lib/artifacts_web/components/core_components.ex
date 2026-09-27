@@ -1,30 +1,9 @@
 defmodule ArtifactsWeb.CoreComponents do
   @moduledoc """
-  Provides core UI components.
-
-  At first glance, this module may seem daunting, but its goal is to provide
-  core building blocks for your application, such as tables, forms, and
-  inputs. The components consist mostly of markup and are well-documented
-  with doc strings and declarative assigns. You may customize and style
-  them in any way you want, based on your application growth and needs.
-
-  The foundation for styling is Tailwind CSS, a utility-first CSS framework,
-  augmented with daisyUI, a Tailwind CSS plugin that provides UI components
-  and themes. Here are useful references:
-
-    * [daisyUI](https://daisyui.com/docs/intro/) - a good place to get
-      started and see the available components.
-
-    * [Tailwind CSS](https://tailwindcss.com) - the foundational framework
-      we build on. You will use it for layout, sizing, flexbox, grid, and
-      spacing.
-
-    * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
-
-    * [Phoenix.Component](https://phoenix-live-view.hexdocs.pm/Phoenix.Component.html) -
-      the component system used by Phoenix. Some components, such as `<.link>`
-      and `<.form>`, are defined there.
-
+  Core UI building blocks (flash, button, input, header, table, list),
+  styled with the app's hand-written `assets/css/app.css` — no Tailwind, no
+  daisyUI, no Heroicons (DESIGN.md "Web app"). Every component here is
+  plain markup plus a class name defined in `app.css`.
   """
   use Phoenix.Component
 
@@ -62,25 +41,14 @@ defmodule ArtifactsWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class={["flash", @kind == :info && "flash-info", @kind == :error && "flash-error"]}
       {@rest}
     >
-      <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
-      ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
-        <div>
-          <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{msg}</p>
-        </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label="close">
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
-        </button>
+      <div>
+        <p :if={@title} class="flash-title">{@title}</p>
+        <p>{msg}</p>
       </div>
+      <button type="button" class="flash-close" aria-label="close">&times;</button>
     </div>
     """
   end
@@ -96,16 +64,13 @@ defmodule ArtifactsWeb.CoreComponents do
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :any
-  attr :variant, :string, values: ~w(primary)
+  attr :variant, :string, values: ~w(primary danger)
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
+    variants = %{"primary" => "btn btn-primary", "danger" => "btn btn-danger", nil => "btn"}
 
-    assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
-      end)
+    assigns = assign_new(assigns, :class, fn -> Map.fetch!(variants, assigns[:variant]) end)
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
@@ -211,8 +176,8 @@ defmodule ArtifactsWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
+    <div class="field">
+      <label class="field-checkbox">
         <input
           type="hidden"
           name={@name}
@@ -220,17 +185,16 @@ defmodule ArtifactsWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
-          <input
-            type="checkbox"
-            id={@id}
-            name={@name}
-            value="true"
-            checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
-            {@rest}
-          />{@label}
-        </span>
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={@class}
+          {@rest}
+        />
+        {@label}
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
@@ -239,13 +203,13 @@ defmodule ArtifactsWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[@class || "select", @errors != [] && (@error_class || "field-error")]}
           multiple={@multiple}
           {@rest}
         >
@@ -260,16 +224,13 @@ defmodule ArtifactsWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <textarea
           id={@id}
           name={@name}
-          class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
-          ]}
+          class={[@class || "textarea", @errors != [] && (@error_class || "field-error")]}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
@@ -281,18 +242,15 @@ defmodule ArtifactsWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <input
           type={@type}
           name={@name}
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
-          class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
-          ]}
+          class={[@class || "input", @errors != [] && (@error_class || "field-error")]}
           {@rest}
         />
       </label>
@@ -304,10 +262,7 @@ defmodule ArtifactsWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="hero-exclamation-circle" class="size-5" />
-      {render_slot(@inner_block)}
-    </p>
+    <p class="field-error-text">{render_slot(@inner_block)}</p>
     """
   end
 
@@ -320,16 +275,12 @@ defmodule ArtifactsWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+    <header class="page-header">
       <div>
-        <h1 class="text-lg font-semibold leading-8">
-          {render_slot(@inner_block)}
-        </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
-          {render_slot(@subtitle)}
-        </p>
+        <h1>{render_slot(@inner_block)}</h1>
+        <p :if={@subtitle != []} class="page-header-subtitle">{render_slot(@subtitle)}</p>
       </div>
-      <div class="flex-none">{render_slot(@actions)}</div>
+      <div :if={@actions != []} class="page-header-actions">{render_slot(@actions)}</div>
     </header>
     """
   end
@@ -366,7 +317,7 @@ defmodule ArtifactsWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
+    <table class="table">
       <thead>
         <tr>
           <th :for={col <- @col}>{col[:label]}</th>
@@ -380,16 +331,14 @@ defmodule ArtifactsWeb.CoreComponents do
           <td
             :for={col <- @col}
             phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
+            class={@row_click && "table-clickable"}
           >
             {render_slot(col, @row_item.(row))}
           </td>
-          <td :if={@action != []} class="w-0 font-semibold">
-            <div class="flex gap-4">
-              <%= for action <- @action do %>
-                {render_slot(action, @row_item.(row))}
-              <% end %>
-            </div>
+          <td :if={@action != []} class="table-actions">
+            <%= for action <- @action do %>
+              {render_slot(action, @row_item.(row))}
+            <% end %>
           </td>
         </tr>
       </tbody>
@@ -413,65 +362,23 @@ defmodule ArtifactsWeb.CoreComponents do
 
   def list(assigns) do
     ~H"""
-    <ul class="list">
-      <li :for={item <- @item} class="list-row">
-        <div class="list-col-grow">
-          <div class="font-bold">{item.title}</div>
-          <div>{render_slot(item)}</div>
-        </div>
+    <ul class="data-list">
+      <li :for={item <- @item}>
+        <div class="data-list-title">{item.title}</div>
+        <div>{render_slot(item)}</div>
       </li>
     </ul>
-    """
-  end
-
-  @doc """
-  Renders a [Heroicon](https://heroicons.com).
-
-  Heroicons come in three styles – outline, solid, and mini.
-  By default, the outline style is used, but solid and mini may
-  be applied by using the `-solid` and `-mini` suffix.
-
-  You can customize the size and colors of the icons by setting
-  width, height, and background color classes.
-
-  Icons are extracted from the `deps/heroicons` directory and bundled within
-  your compiled app.css by the plugin in `assets/vendor/heroicons.js`.
-
-  ## Examples
-
-      <.icon name="hero-x-mark" />
-      <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-  """
-  attr :name, :string, required: true
-  attr :class, :any, default: "size-4"
-
-  def icon(%{name: "hero-" <> _} = assigns) do
-    ~H"""
-    <span class={[@name, @class]} />
     """
   end
 
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do
-    JS.show(js,
-      to: selector,
-      time: 300,
-      transition:
-        {"transition-all ease-out duration-300",
-         "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95",
-         "opacity-100 translate-y-0 sm:scale-100"}
-    )
+    JS.show(js, to: selector, time: 150, transition: {"fade-in", "fade-out", ""})
   end
 
   def hide(js \\ %JS{}, selector) do
-    JS.hide(js,
-      to: selector,
-      time: 200,
-      transition:
-        {"transition-all ease-in duration-200", "opacity-100 translate-y-0 sm:scale-100",
-         "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"}
-    )
+    JS.hide(js, to: selector, time: 150, transition: {"fade-out", "", "fade-out"})
   end
 
   @doc """

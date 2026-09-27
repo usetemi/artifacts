@@ -1,7 +1,10 @@
-# One Fly Machine that stops when idle and starts on the next request.
-# Copy this file, set `app` and PHX_HOST to your app name, pick the
-# region nearest your database, and set DATABASE_URL and SECRET_KEY_BASE
-# as secrets. See ../README.md.
+# Copy this file, set `app` and `primary_region` to your app name and
+# the region nearest your Fly Managed Postgres cluster, pin `image` to a
+# released tag (built by .github/workflows/release.yml), and set
+# APP_HOST and CONTENT_HOST to your two hostnames below. DATABASE_URL,
+# SECRET_KEY_BASE, TOKEN_SIGNING_SECRET, GOOGLE_CLIENT_ID, and
+# GOOGLE_CLIENT_SECRET are secrets: set them with `fly secrets set`, not
+# here. See ../README.md.
 app = "artifacts"
 primary_region = "iad"
 
@@ -12,11 +15,20 @@ primary_region = "iad"
   release_command = "/app/bin/migrate"
 
 [env]
-  # The origin the chrome and the page runtime connect from; sockets from
-  # any other host are refused.
-  PHX_HOST = "artifacts.fly.dev"
+  # The app host serves the web app, /auth, /api, and /mcp; the content
+  # host serves only the page route and the page socket. The chrome, the
+  # page runtime, and the CSP's frame-ancestors all key off these, so
+  # sockets and page requests from any other host are refused. Give each
+  # its own DNS record and `fly certs add` certificate.
+  APP_HOST = "artifacts.example.com"
+  CONTENT_HOST = "artifacts-content.example.com"
+  # Empty allows any verified Google account to sign up; set it to the
+  # domains your instance should admit instead.
+  SIGNUP_EMAIL_DOMAINS = ""
   PORT = "4000"
-  DATABASE_SSL = "true"
+  # Fly's private network (used to reach Fly Managed Postgres) is
+  # IPv6-only.
+  ECTO_IPV6 = "true"
 
 [http_service]
   internal_port = 4000
@@ -24,6 +36,13 @@ primary_region = "iad"
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    # An open page's socket and a running `wait` each hold a connection
+    # for as long as they stay open, not just for one request.
+    soft_limit = 1000
+    hard_limit = 1000
 
 [[vm]]
   memory = "512mb"

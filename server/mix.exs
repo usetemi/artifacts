@@ -5,13 +5,14 @@ defmodule Artifacts.MixProject do
     [
       app: :artifacts,
       version: "0.1.0",
-      elixir: "~> 1.17",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      usage_rules: usage_rules()
     ]
   end
 
@@ -47,13 +48,35 @@ defmodule Artifacts.MixProject do
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.2.0"},
-      {:lazy_html, ">= 0.1.0", only: :test},
+      {:lazy_html, "~> 0.1.13", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:ash, "~> 3.33"},
+      {:ash_postgres, "~> 2.13"},
+      {:ash_authentication, "~> 4.15"},
+      {:ash_authentication_phoenix, "~> 2.17"},
+      {:ash_phoenix, "~> 2.3"},
+      {:ash_ai, "~> 1.1"},
+      {:ash_json_api, "~> 1.7"},
+      {:simple_sat, "~> 0.1"},
+      {:igniter, "~> 0.8.4", only: [:dev, :test]},
+      {:usage_rules, "~> 1.2", only: [:dev]}
+    ]
+  end
+
+  defp usage_rules do
+    [
+      file: "AGENTS.md",
+      usage_rules: [
+        {:usage_rules, sub_rules: []},
+        "phoenix:all",
+        {:ash, link: :markdown},
+        {~r/^ash_/, link: :markdown}
+      ]
     ]
   end
 
@@ -65,10 +88,8 @@ defmodule Artifacts.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      setup: ["deps.get", "ash.setup", "run priv/repo/seeds.exs", "assets.setup", "assets.build"],
+      test: ["ash.setup --quiet", "test"],
       "assets.setup": ["esbuild.install --if-missing"],
       "assets.build": ["compile", "esbuild artifacts"],
       "assets.deploy": [
