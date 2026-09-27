@@ -130,8 +130,10 @@ if config_env() == :prod do
 
   config :artifacts, ArtifactsWeb.Endpoint,
     url: [host: app_host, port: url_port, scheme: scheme],
-    # Both hostnames must resolve here: HostRole assigns the role per
-    # request, so one endpoint serves the app host and the content host.
+    # Endpoint-wide fallback only: the `/live` and `/socket` sockets each
+    # carry their own stricter check_origin (ArtifactsWeb.Origins), built
+    # from this same `url` config. This list is what any future socket
+    # without its own override would fall back to.
     check_origin: [origin.(app_host), origin.(content_host)],
     http: [
       # Enable IPv6 and bind on all interfaces.
