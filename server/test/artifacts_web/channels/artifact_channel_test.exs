@@ -109,6 +109,19 @@ defmodule ArtifactsWeb.ArtifactChannelTest do
   end
 
   describe "presence:update" do
+    test "succeeds immediately after join, before the :after_join presence_state push", %{
+      user: user,
+      artifact: artifact
+    } do
+      # :after_join is sent to this channel process before its join reply
+      # ever leaves the process, so it is always handled before a push a
+      # client only makes after receiving that reply — such as
+      # runtime.js flushing any meta tracked while still offline.
+      {:ok, _reply, socket} = join_as(artifact, user)
+      ref = push(socket, "presence:update", %{"meta" => %{"cursor" => [0, 0]}})
+      assert_reply ref, :ok
+    end
+
     test "replaces this viewer's meta and is capped at 4 KiB", %{user: user, artifact: artifact} do
       {:ok, _reply, socket} = join_as(artifact, user)
       assert_push "presence_state", _state
