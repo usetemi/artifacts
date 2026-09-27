@@ -16,7 +16,9 @@ defmodule Artifacts.Publishing do
   operates on.
   """
 
-  use Ash.Domain, otp_app: :artifacts
+  use Ash.Domain, otp_app: :artifacts, extensions: [AshAi, AshJsonApi.Domain]
+
+  alias Artifacts.Publishing.Artifact
 
   resources do
     resource Artifacts.Publishing.Artifact do
@@ -34,11 +36,56 @@ defmodule Artifacts.Publishing do
       define :wait, action: :wait, args: [:artifact_id]
       define :history, action: :history, args: [:artifact_id]
       define :get_artifact, action: :get_artifact, args: [:artifact_id]
+      define :publish_artifact, action: :publish_artifact, args: [:html]
     end
 
     resource Artifacts.Publishing.Version
     resource Artifacts.Publishing.StateEntry
     resource Artifacts.Publishing.Submission
     resource Artifacts.Publishing.Event
+  end
+
+  # DESIGN.md "Agent interfaces → MCP": the tool names are exactly the
+  # table's, mapped onto the Artifact actions above (plan §3, "Domain code
+  # interfaces"). `list_artifacts`/`change_state`/`submit`/`rename_artifact`/
+  # `archive_artifact`/`unarchive_artifact` are the resource's own CRUD
+  # actions; `get_state`/`wait`/`history`/`get_artifact`/`publish_artifact`
+  # are generic actions ash_ai dispatches the same way.
+  tools do
+    tool :list_artifacts, Artifact, :list
+    tool :get_artifact, Artifact, :get_artifact
+    tool :publish_artifact, Artifact, :publish_artifact
+    tool :get_state, Artifact, :get_state
+    tool :change_state, Artifact, :change_state
+    tool :submit, Artifact, :submit
+    tool :wait, Artifact, :wait
+    tool :history, Artifact, :history
+    tool :rename_artifact, Artifact, :rename
+    tool :archive_artifact, Artifact, :archive
+    tool :unarchive_artifact, Artifact, :unarchive
+  end
+
+  # DESIGN.md "Agent interfaces → HTTP API": the same Artifact actions,
+  # reached under `/api/artifacts`. `Version` is never its own JSON:API
+  # resource type (plan §1); its HTML is reached only through the raw
+  # `versions/:n.html` route declared in the router ahead of the `/api`
+  # forward, and through `get_artifact`'s own `include_html` argument.
+  json_api do
+    routes do
+      base_route "/artifacts", Artifact do
+        get :read
+        index :list
+        post :create
+        patch :publish, route: "/:id/publish"
+        patch :change_state, route: "/:id/state"
+        patch :submit, route: "/:id/submit"
+        patch :rename, route: "/:id/rename"
+        patch :archive, route: "/:id/archive"
+        patch :unarchive, route: "/:id/unarchive"
+        route :get, "/:artifact_id/state", :get_state
+        route :post, "/:artifact_id/wait", :wait
+        route :get, "/:artifact_id/history", :history
+      end
+    end
   end
 end

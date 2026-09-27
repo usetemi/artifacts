@@ -7,7 +7,7 @@ defmodule Artifacts.Publishing.Errors do
   second way.
   """
 
-  alias Artifacts.Publishing.Errors.{Archived, Conflict, Quota}
+  alias Artifacts.Publishing.Errors.{Archived, Conflict, NotFound, Quota}
 
   @codes ~w(conflict archived not_found forbidden quota invalid unknown)
 
@@ -30,6 +30,7 @@ defmodule Artifacts.Publishing.Errors do
   def to_code(%Archived{}), do: "archived"
   def to_code(%Quota{}), do: "quota"
   def to_code(%Ash.Error.Query.NotFound{}), do: "not_found"
+  def to_code(%NotFound{}), do: "not_found"
   def to_code(%Ash.Error.Invalid{}), do: "invalid"
   def to_code(%Ash.Error.Unknown{}), do: "unknown"
   def to_code(%Ash.Error.Framework{}), do: "unknown"
