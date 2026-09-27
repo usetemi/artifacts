@@ -7,6 +7,7 @@ defmodule ArtifactsWeb.Router do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
+    plug :put_root_layout, html: {ArtifactsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug :load_from_session
@@ -37,9 +38,27 @@ defmodule ArtifactsWeb.Router do
   scope "/", ArtifactsWeb do
     pipe_through :browser
 
+    ash_authentication_live_session :artifacts,
+      on_mount: [{ArtifactsWeb.LiveUserAuth, :live_user_required}] do
+      live "/", ArtifactsLive
+      live "/a/:id", ArtifactLive
+      live "/settings", SettingsLive
+    end
+
+    sign_in_route(
+      resources: [Artifacts.Accounts.User],
+      overrides: [ArtifactsWeb.AuthOverrides, AshAuthentication.Phoenix.Overrides.Default],
+      on_mount: [{ArtifactsWeb.LiveUserAuth, :live_no_user}],
+      auth_routes_prefix: "/auth"
+    )
+
+    sign_out_route(AuthController)
+
+    # Declared last: it forwards the whole "/auth" path to
+    # AshAuthentication.Phoenix.StrategyRouter, which would otherwise shadow
+    # any later route also prefixed "/auth" (none exist here, but this is
+    # the safe, documented order — notes/ash_authentication.md §5.1).
     auth_routes(AuthController, Artifacts.Accounts.User)
-    # Slice D fills: the Artifacts/Settings LiveViews, sign_in_route,
-    # sign_out_route.
   end
 
   scope "/", ArtifactsWeb do

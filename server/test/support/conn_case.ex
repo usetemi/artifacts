@@ -33,7 +33,13 @@ defmodule ArtifactsWeb.ConnCase do
 
   setup tags do
     Artifacts.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    # Every :browser/:api/:mcp pipeline plug requires conn.host to match the
+    # configured app_host (ArtifactsWeb.Plugs.RequireHost); Phoenix.ConnTest's
+    # default host ("www.example.com") would 404 before reaching the router.
+    # Tests that specifically exercise the content host or a mismatch
+    # override this explicitly with `Map.put(conn, :host, ...)`.
+    app_host = Application.fetch_env!(:artifacts, :app_host)
+    {:ok, conn: Phoenix.ConnTest.build_conn() |> Map.put(:host, app_host)}
   end
 
   @doc """
