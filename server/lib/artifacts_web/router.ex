@@ -44,7 +44,11 @@ defmodule ArtifactsWeb.Router do
 
   scope "/", ArtifactsWeb do
     pipe_through :content
-    # Slice B fills: `get "/a/:id/page", PageController, :page`.
+
+    # `log: false`: the "Processing with..." dispatch log Phoenix would
+    # otherwise emit for this route carries `conn.params`, which includes
+    # the page token in `t` (ArtifactsWeb.PageController's own doc).
+    get "/a/:id/page", PageController, :page, log: false
   end
 
   scope "/api", ArtifactsWeb do

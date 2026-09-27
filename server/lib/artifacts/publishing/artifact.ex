@@ -151,6 +151,18 @@ defmodule Artifacts.Publishing.Artifact do
       run fn input, context -> get_state(input, context) end
     end
 
+    # Distinct from `get_state`: this returns the flat, dotted-path leaves
+    # (`%{"a.b" => 1}`), the shape the page channel's join reply and
+    # `state:ops` push carry, and `runtime.js`'s `applyOps`/`state.js`
+    # algebra operates on. `get_state`'s expanded nested object is for a
+    # human or agent reading state through MCP/HTTP, not for reapplying
+    # ops to.
+    action :get_leaves, :map do
+      argument :artifact_id, :string, allow_nil?: false
+
+      run fn input, context -> get_leaves(input, context) end
+    end
+
     action :wait, {:array, :struct} do
       constraints items: [instance_of: Artifacts.Publishing.Submission]
       argument :artifact_id, :string, allow_nil?: false
@@ -231,6 +243,14 @@ defmodule Artifacts.Publishing.Artifact do
   end
 
   defp get_state(input, context) do
+    with {:ok, leaves} <- read_leaves(input, context) do
+      {:ok, State.expand(leaves)}
+    end
+  end
+
+  defp get_leaves(input, context), do: read_leaves(input, context)
+
+  defp read_leaves(input, context) do
     artifact_id = input.arguments.artifact_id
 
     with {:ok, _artifact} <- Ash.get(__MODULE__, artifact_id, read_opts(context)) do
@@ -240,7 +260,7 @@ defmodule Artifacts.Publishing.Artifact do
         |> Ash.read!(authorize?: false)
         |> Map.new(&{&1.path, &1.value})
 
-      {:ok, State.expand(leaves)}
+      {:ok, leaves}
     end
   end
 

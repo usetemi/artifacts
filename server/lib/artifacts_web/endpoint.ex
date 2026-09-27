@@ -15,8 +15,16 @@ defmodule ArtifactsWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  # The page socket is declared by slice B, which also adds the
-  # ArtifactsWeb.ArtifactSocket module it points at.
+  # The content host's page socket, checked against the content origin
+  # only (never the app origin) via an MFA, since the origin is
+  # runtime-configured and this module compiles once per release.
+  socket "/socket", ArtifactsWeb.ArtifactSocket,
+    websocket: [
+      check_origin: {ArtifactsWeb.ArtifactSocket, :check_origin?, []},
+      # Connect params carry the page token (`t`); Phoenix.Logger would
+      # otherwise log them on every connect.
+      log: false
+    ]
 
   # Assigns conn.assigns.host_role (:app | :content) before anything else
   # runs, so every downstream plug and the router's per-pipeline
