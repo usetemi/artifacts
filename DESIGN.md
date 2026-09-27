@@ -216,16 +216,17 @@ An archived Artifact's chrome shows its title and archive status with an
 Unarchive control and no iframe; its Versions, State, and History are
 read through MCP and the HTTP API.
 
-**Socket.** The runtime connects to the socket with the token as a
-connect param; the socket assigns the actor, and joining `artifact:<id>`
-requires the token's artifact id. When a connect is refused, or the
-token is more than nine minutes old before a reconnect, the runtime
-posts `{type: "artifact:token-request", id}` to the chrome's window at
-the app origin. The chrome's hook accepts it only from the iframe's own
-window at the content origin, asks the LiveView for a fresh token over
-`pushEvent`, and posts `{type: "artifact:token", token}` back to the
-iframe at the content origin; the runtime accepts that reply only from
-`window.parent` at the app origin.
+**Socket.** The page socket's `check_origin` is the content origin; the
+LiveView socket's is the app origin. The runtime connects to the page
+socket with the token as a connect param; the socket assigns the actor,
+and joining `artifact:<id>` requires the token's artifact id. When a
+connect is refused, or the token is more than nine minutes old before a
+reconnect, the runtime posts `{type: "artifact:token-request", id}` to
+the chrome's window at the app origin. The chrome's hook accepts it only
+from the iframe's own window at the content origin, asks the LiveView
+for a fresh token over `pushEvent`, and posts `{type: "artifact:token",
+token}` back to the iframe at the content origin; the runtime accepts
+that reply only from `window.parent` at the app origin.
 
 A new Version reaches the chrome over the same PubSub topic the channel
 publishes on. The chrome mints a fresh token and rewrites the iframe's
@@ -285,16 +286,16 @@ await artifact.publish(html);          // rejects {code: "conflict"}
 ```
 
 `state.set` applies locally at once and resolves on commit. `subscribe`
-fires once after sync and then per change, coalesced per animation
-frame. Every write rejects with one of the stable codes named in
-[Content changes](#content-changes), or `unavailable`, which the runtime
-adds on its own for a write attempted while disconnected. `from` on `on`
-carries the same actor shape as `by` elsewhere on the wire: `{type, id,
-name, harness}`. The runtime never touches the DOM. The chrome's own
-Submit control, outside the page, has a multi-line note field and calls
-`Artifacts.Publishing.submit` directly with `{"note" => note}` when it
-is filled and no payload otherwise, so every page can be handed back,
-with or without words.
+fires once, synchronously, if already synced, and then per change,
+coalesced per animation frame. Every write rejects with one of the
+stable codes named in [Content changes](#content-changes), or
+`unavailable`, which the runtime adds on its own for a write attempted
+while disconnected. `from` on `on` carries the same actor shape as `by`
+elsewhere on the wire: `{type, id, name, harness}`. The runtime never
+touches the DOM. The chrome's own Submit control, outside the page, has
+a multi-line note field and calls `Artifacts.Publishing.submit` directly
+with `{"note" => note}` when it is filled and no payload otherwise, so
+every page can be handed back, with or without words.
 
 ## Agent interfaces
 
@@ -420,15 +421,15 @@ Configuration is environment variables: `DATABASE_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
 `SIGNUP_EMAIL_DOMAINS`, `PORT`, `POOL_SIZE`, `DATABASE_SSL`,
 `ECTO_IPV6`, `PHX_SCHEME`, `PHX_URL_PORT`. `GOOGLE_REDIRECT_URI` defaults
-to `https://<APP_HOST>/auth/user/google/callback`; whichever value is
+to the app origin plus `/auth/user/google/callback`; whichever value is
 configured must match Google Cloud Console's registered redirect URI
 character for character. `DATABASE_SSL` turns on TLS with the OS trust
 store; off by default, since MPG's traffic already travels Fly's private
 network. `PHX_SCHEME` and `PHX_URL_PORT` override the derived
 `https`/`443` for a plain-`http` deployment — Docker Compose's
-`http://localhost:4000` and `http://127.0.0.1:4000` — and feed the
-redirect URI default, the iframe's `src`, and the CSP's
-`frame-ancestors`.
+`http://localhost:4000` and `http://127.0.0.1:4000` — and feed the app
+origin used above, the `check_origin` values, the iframe's `src`, and
+the CSP's `frame-ancestors`.
 
 ## Limitations
 
