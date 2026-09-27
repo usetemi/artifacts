@@ -16,17 +16,30 @@ services:
       retries: 10
 
   app:
-    build:
-      context: ../server
+    image: ghcr.io/usetemi/artifacts:latest
     command: ["sh", "-c", "/app/bin/migrate && exec /app/bin/server"]
     environment:
       DATABASE_URL: ecto://artifacts:${POSTGRES_PASSWORD:-artifacts}@postgres/artifacts
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?generate one with `openssl rand -base64 48`}
-      PHX_HOST: ${PHX_HOST:-localhost}
-      PHX_SCHEME: ${PHX_SCHEME:-http}
-      PORT: "${PORT:-4000}"
+      TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?generate one with `openssl rand -base64 48`}
+      APP_HOST: localhost
+      CONTENT_HOST: 127.0.0.1
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-replace-with-your-google-oauth-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-replace-with-your-google-oauth-client-secret}
+      # Must match the redirect URI registered on the Google OAuth client
+      # character for character; defaults to the app origin plus
+      # /auth/user/google/callback, so this is that default made explicit
+      # for the http://localhost:4000 origin below.
+      GOOGLE_REDIRECT_URI: http://localhost:4000/auth/user/google/callback
+      SIGNUP_EMAIL_DOMAINS: ""
+      PORT: "4000"
+      POOL_SIZE: "10"
+      DATABASE_SSL: "false"
+      ECTO_IPV6: "false"
+      PHX_SCHEME: http
+      PHX_URL_PORT: "4000"
     ports:
-      - "${PORT:-4000}:${PORT:-4000}"
+      - "4000:4000"
     depends_on:
       postgres:
         condition: service_healthy

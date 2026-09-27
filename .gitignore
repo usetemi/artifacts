@@ -8,9 +8,6 @@ server/priv/static/assets/js/
 server/priv/static/cache_manifest.json
 server/assets/node_modules/
 
-# Rust (cli/)
-cli/target/
-
 # Local environment
 .env
 .env.*
