@@ -49,9 +49,9 @@ if config_env() == :prod do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
-  # A hosted Postgres (Neon and the like) terminates TLS with a
-  # publicly trusted certificate, which Postgrex verifies against the
-  # OS trust store. A Postgres beside the host speaks plain TCP.
+  # DATABASE_SSL verifies the server's certificate against the OS trust
+  # store. Off by default: Fly Managed Postgres traffic stays on Fly's
+  # private network, and a Postgres beside the host speaks plain TCP.
   ssl =
     if System.get_env("DATABASE_SSL") in ~w(true 1),
       do: [cacerts: :public_key.cacerts_get()],
@@ -103,6 +103,12 @@ if config_env() == :prod do
       given -> String.to_integer(given)
     end
 
+  origin = fn host ->
+    if {scheme, url_port} in [{"https", 443}, {"http", 80}],
+      do: "#{scheme}://#{host}",
+      else: "#{scheme}://#{host}:#{url_port}"
+  end
+
   config :artifacts, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :artifacts,
@@ -112,7 +118,7 @@ if config_env() == :prod do
     google_client_secret: System.get_env("GOOGLE_CLIENT_SECRET"),
     google_redirect_uri:
       System.get_env("GOOGLE_REDIRECT_URI") ||
-        "#{scheme}://#{app_host}/auth/user/google/callback",
+        "#{origin.(app_host)}/auth/user/google/callback",
     # Comma-separated; empty or unset means any domain may sign up.
     signup_email_domains: System.get_env("SIGNUP_EMAIL_DOMAINS", ""),
     token_signing_secret:
@@ -126,7 +132,7 @@ if config_env() == :prod do
     url: [host: app_host, port: url_port, scheme: scheme],
     # Both hostnames must resolve here: HostRole assigns the role per
     # request, so one endpoint serves the app host and the content host.
-    check_origin: ["#{scheme}://#{app_host}", "#{scheme}://#{content_host}"],
+    check_origin: [origin.(app_host), origin.(content_host)],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
