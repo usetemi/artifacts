@@ -6,9 +6,14 @@ defmodule Artifacts.Publishing do
   Every code interface below whose action creates the aggregate
   (`create_artifact`) or updates it (`publish`, `change_state`, `submit`,
   `rename`, `archive`, `unarchive`) takes the record itself except
-  `create_artifact`, which has none yet. The four generic-action interfaces
-  (`get_state`, `wait`, `history`, `get_artifact`) take the Artifact's id,
-  not the record — a generic action has no record subject (plan §3).
+  `create_artifact`, which has none yet. The five generic-action interfaces
+  (`get_state`, `get_leaves`, `wait`, `history`, `get_artifact`) take the
+  Artifact's id, not the record — a generic action has no record subject
+  (plan §3). `get_state` reduces State to the nested object a human or
+  agent reads through MCP/HTTP; `get_leaves` gives the flat, dotted-path
+  leaves the page channel's join reply and `state:ops` push carry, which
+  is what the browser runtime's state algebra (`assets/js/state.js`)
+  operates on.
   """
 
   use Ash.Domain, otp_app: :artifacts
@@ -25,6 +30,7 @@ defmodule Artifacts.Publishing do
       define :list_artifacts, action: :list, args: [:organization_id]
 
       define :get_state, action: :get_state, args: [:artifact_id]
+      define :get_leaves, action: :get_leaves, args: [:artifact_id]
       define :wait, action: :wait, args: [:artifact_id]
       define :history, action: :history, args: [:artifact_id]
       define :get_artifact, action: :get_artifact, args: [:artifact_id]
