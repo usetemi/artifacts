@@ -16,9 +16,9 @@ defmodule Artifacts.PublishingTest do
   end
 
   describe "create and versions" do
-    test "creates version 1 with an unguessable id and broadcasts it", %{user: user} do
-      Phoenix.PubSub.subscribe(Artifacts.PubSub, "artifact:pending")
-
+    test "creates version 1 with an unguessable id, and publishing again broadcasts it", %{
+      user: user
+    } do
       {:ok, artifact} = Publishing.create_artifact("Board", html(), actor: user)
       Phoenix.PubSub.subscribe(Artifacts.PubSub, "artifact:#{artifact.id}")
 
@@ -255,6 +255,43 @@ defmodule Artifacts.PublishingTest do
     end
   end
 
+  describe "get_artifact" do
+    test "defaults to the current version's html", %{user: user} do
+      artifact = artifact_fixture!(user)
+      {:ok, _} = Publishing.publish(artifact, "<p>2</p>", nil, actor: user)
+
+      assert {:ok, current} =
+               Publishing.get_artifact(artifact.id, %{include_html: true}, actor: user)
+
+      assert current.__metadata__.version == 2
+      assert current.__metadata__.html == "<p>2</p>"
+    end
+
+    test "returns an earlier version's html when asked", %{user: user} do
+      artifact = artifact_fixture!(user)
+      {:ok, _} = Publishing.publish(artifact, "<p>2</p>", nil, actor: user)
+
+      assert {:ok, v1} =
+               Publishing.get_artifact(artifact.id, %{version: 1, include_html: true},
+                 actor: user
+               )
+
+      assert v1.__metadata__.version == 1
+      assert v1.__metadata__.html == html()
+    end
+
+    test "a nonexistent version resolves to not_found instead of raising", %{user: user} do
+      artifact = artifact_fixture!(user)
+
+      assert {:error, error} =
+               Publishing.get_artifact(artifact.id, %{version: 999, include_html: true},
+                 actor: user
+               )
+
+      assert Errors.to_code(error) == "not_found"
+    end
+  end
+
   describe "state" do
     test "persists leaves of every JSON shape and broadcasts the ops", %{user: user} do
       artifact = artifact_fixture!(user)
@@ -462,6 +499,17 @@ defmodule Artifacts.PublishingTest do
     test "wait with a zero timeout is one query and times out empty", %{user: user} do
       artifact = artifact_fixture!(user)
       assert {:ok, []} = Publishing.wait(artifact.id, %{since: 0, timeout: 0}, actor: user)
+    end
+
+    test "wait leaves an unrelated message in the mailbox instead of swallowing it", %{
+      user: user
+    } do
+      artifact = artifact_fixture!(user)
+      send(self(), :unrelated)
+
+      assert {:ok, []} = Publishing.wait(artifact.id, %{since: 0, timeout: 100}, actor: user)
+
+      assert_received :unrelated
     end
 
     test "the 10,000-submission cap refuses further submits", %{user: user} do

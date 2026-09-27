@@ -271,7 +271,9 @@ defmodule Artifacts.Publishing.Artifact do
           {:ok, []}
         else
           receive do
-            _message -> poll_wait(artifact_id, since, deadline)
+            {:version, _} -> poll_wait(artifact_id, since, deadline)
+            {:state_ops, _} -> poll_wait(artifact_id, since, deadline)
+            {:submission, _} -> poll_wait(artifact_id, since, deadline)
           after
             remaining -> {:ok, []}
           end
@@ -379,8 +381,10 @@ defmodule Artifacts.Publishing.Artifact do
       artifact = Ash.Resource.put_metadata(artifact, :version, number)
 
       if input.arguments.include_html do
-        version = Ash.get!(Version, [artifact_id: artifact_id, number: number], authorize?: false)
-        {:ok, Ash.Resource.put_metadata(artifact, :html, version.html)}
+        with {:ok, version} <-
+               Ash.get(Version, [artifact_id: artifact_id, number: number], authorize?: false) do
+          {:ok, Ash.Resource.put_metadata(artifact, :html, version.html)}
+        end
       else
         {:ok, artifact}
       end

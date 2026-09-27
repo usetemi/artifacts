@@ -209,7 +209,7 @@ defmodule Artifacts.AccountsTest do
       assert {:error, _error} = Accounts.leave(membership, actor: user)
     end
 
-    test "leave is allowed for a Harness-signed-in actor acting on their own membership" do
+    test "leave is forbidden for a Harness-signed-in actor, even on their own membership" do
       owner = user_fixture!()
       organization = organization_fixture!(owner)
       other = user_fixture!()
@@ -217,7 +217,10 @@ defmodule Artifacts.AccountsTest do
       harness = harness_fixture!(other)
       actor = api_key_actor(User, harness.__metadata__.plaintext_api_key)
 
-      assert :ok = Accounts.leave(membership, actor: actor)
+      assert {:error, %Ash.Error.Forbidden{}} = Accounts.leave(membership, actor: actor)
+
+      assert Ash.count!(Ash.Query.filter(Membership, id == ^membership.id), authorize?: false) ==
+               1
     end
   end
 

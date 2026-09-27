@@ -90,6 +90,8 @@ defmodule Artifacts.Accounts.Membership do
     end
 
     policy action(:leave) do
+      forbid_if AshAuthentication.Checks.UsingApiKey
+      forbid_if Artifacts.Accounts.Checks.ActorIsAgent
       authorize_if expr(user_id == ^actor(:id))
     end
   end
