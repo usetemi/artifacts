@@ -175,9 +175,11 @@ and shows who else is looking:
 
 ## Rules
 
-- The page's CSP allows scripts from its own origin and the common CDNs,
-  and images from anywhere; every other connection is limited to the
-  socket host. Inline what none of those cover.
+- The page's CSP allows scripts from its own origin, cdnjs.cloudflare.com,
+  cdn.jsdelivr.net, unpkg.com, and esm.sh; styles from those (except
+  esm.sh) and fonts.googleapis.com; fonts from fonts.gstatic.com; images
+  from anywhere. Every other connection is limited to the socket host.
+  Inline what none of those cover.
 - `wait` is the only way to wait; no polling loops.
 - The Artifact's Organization is the only protection: any Actor in it can
   view the page, change its State, submit, and publish over it. Put

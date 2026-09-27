@@ -107,10 +107,12 @@ the same region.
 6. Deploy:
 
    ```sh
-   fly deploy --config fly/fly.toml -a <app>
+   fly deploy --ha=false --config fly/fly.toml -a <app>
    ```
 
-   The release command runs migrations before the new Machine takes
+   `--ha=false` keeps one Machine: PubSub, Presence, and `wait` are
+   in-process, so a second Machine would split pages from agents. The
+   release command runs migrations before the new Machine takes
    traffic. To update later, bump the image tag in `fly.toml` and
    deploy again.
 

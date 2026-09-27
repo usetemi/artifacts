@@ -200,7 +200,7 @@ defmodule ArtifactsWeb.SettingsLive do
           <input
             type="text"
             name="name"
-            placeholder="e.g. Victor's Claude Code on kanto"
+            placeholder="e.g. Claude Code on my laptop"
             required
             class="input"
           />
