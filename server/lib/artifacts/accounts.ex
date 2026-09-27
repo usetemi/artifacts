@@ -12,7 +12,9 @@ defmodule Artifacts.Accounts do
   destroy action always works.
   """
 
-  use Ash.Domain, otp_app: :artifacts
+  use Ash.Domain, otp_app: :artifacts, extensions: [AshAi]
+
+  alias Artifacts.Accounts.Organization
 
   resources do
     resource Artifacts.Accounts.User
@@ -43,5 +45,14 @@ defmodule Artifacts.Accounts do
       define :create_agent_key, action: :create, args: [:agent_id, :name, :expires_at]
       define :revoke_agent_key, action: :revoke
     end
+  end
+
+  # DESIGN.md "Agent interfaces → MCP": the one Accounts tool. Every other
+  # access-management action (`add_member`, `create_agent`,
+  # `create_harness`, ...) `forbid_if UsingApiKey` and forbids an Agent
+  # actor (DESIGN.md "Policies"), so an MCP or HTTP caller could never
+  # exercise them — they stay web-only (Slice D).
+  tools do
+    tool :list_organizations, Organization, :read
   end
 end

@@ -13,6 +13,7 @@ defmodule Artifacts.Publishing.Artifact do
   use Ash.Resource,
     domain: Artifacts.Publishing,
     data_layer: AshPostgres.DataLayer,
+    extensions: [AshJsonApi.Resource],
     authorizers: [Ash.Policy.Authorizer],
     notifiers: [Artifacts.Publishing.ChannelNotifier]
 
@@ -25,7 +26,7 @@ defmodule Artifacts.Publishing.Artifact do
   }
 
   alias Artifacts.Publishing.Artifact.Validations.HtmlSize
-  alias Artifacts.Publishing.{Actor, Event, StateEntry, Submission, Version}
+  alias Artifacts.Publishing.{Actor, Errors, Event, StateEntry, Submission, Version}
   alias Artifacts.State
 
   require Ash.Query
@@ -37,6 +38,10 @@ defmodule Artifacts.Publishing.Artifact do
     references do
       reference :organization, on_delete: :restrict
     end
+  end
+
+  json_api do
+    type "artifact"
   end
 
   attributes do
@@ -170,13 +175,23 @@ defmodule Artifacts.Publishing.Artifact do
       run fn input, context -> history(input, context) end
     end
 
-    action :get_artifact, :struct do
-      constraints instance_of: Artifacts.Publishing.Artifact
+    action :get_artifact, :map do
       argument :artifact_id, :string, allow_nil?: false
       argument :version, :integer, allow_nil?: true
       argument :include_html, :boolean, allow_nil?: false, default: false
 
       run fn input, context -> get_artifact(input, context) end
+    end
+
+    action :publish_artifact, :struct do
+      constraints instance_of: Artifacts.Publishing.Artifact
+      argument :artifact_id, :string, allow_nil?: true
+      argument :title, :string, allow_nil?: true, constraints: [min_length: 1]
+      argument :html, :string, allow_nil?: false
+      argument :if_version, :integer, allow_nil?: true
+      argument :organization_id, :uuid, allow_nil?: true
+
+      run fn input, context -> publish_artifact(input, context) end
     end
   end
 
@@ -230,10 +245,32 @@ defmodule Artifacts.Publishing.Artifact do
     [actor: context.actor, context: %{shared: shared}]
   end
 
+  # `Ash.get/3`'s own `Ash.Error.Query.NotFound` already resolves to the
+  # "not_found" code (`Errors.to_code/1`), but `ash_ai`'s own
+  # `AshAi.ToToolError` impl for that exact struct renders it as "could not
+  # be found" — a built-in impl this app cannot redefine (module
+  # redefinition, fails `--warnings-as-errors`). Every generic action that
+  # looks up its own Artifact goes through this instead, so an MCP tool
+  # call's error text is the stable code (`Errors.NotFound`, this app's
+  # own struct, DOES get its own `AshAi.ToToolError` impl).
+  defp get_owned_artifact(artifact_id, context) do
+    case Ash.get(__MODULE__, artifact_id, read_opts(context)) do
+      {:ok, artifact} ->
+        {:ok, artifact}
+
+      {:error, error} ->
+        if Errors.to_code(error) == "not_found" do
+          {:error, Errors.NotFound.exception(artifact_id: artifact_id)}
+        else
+          {:error, error}
+        end
+    end
+  end
+
   defp get_state(input, context) do
     artifact_id = input.arguments.artifact_id
 
-    with {:ok, _artifact} <- Ash.get(__MODULE__, artifact_id, read_opts(context)) do
+    with {:ok, _artifact} <- get_owned_artifact(artifact_id, context) do
       leaves =
         StateEntry
         |> Ash.Query.filter(artifact_id == ^artifact_id)
@@ -248,7 +285,7 @@ defmodule Artifacts.Publishing.Artifact do
     artifact_id = input.arguments.artifact_id
     timeout = min(input.arguments.timeout, 50_000)
 
-    with {:ok, _artifact} <- Ash.get(__MODULE__, artifact_id, read_opts(context)) do
+    with {:ok, _artifact} <- get_owned_artifact(artifact_id, context) do
       topic = "artifact:#{artifact_id}"
       :ok = Phoenix.PubSub.subscribe(Artifacts.PubSub, topic)
 
@@ -308,7 +345,7 @@ defmodule Artifacts.Publishing.Artifact do
     after_id = input.arguments.after
     limit = min(input.arguments.limit, @max_history_page)
 
-    with {:ok, _artifact} <- Ash.get(__MODULE__, artifact_id, read_opts(context)) do
+    with {:ok, _artifact} <- get_owned_artifact(artifact_id, context) do
       events =
         Event
         |> Ash.Query.filter(artifact_id == ^artifact_id and id > ^after_id)
@@ -371,19 +408,63 @@ defmodule Artifacts.Publishing.Artifact do
     Actor.ref(actor, %{harness_name: event.harness && event.harness.name})
   end
 
+  # `:map`, not `:struct instance_of: __MODULE__`: `AshAi.Serializer` and
+  # `AshJsonApi.Serializer` both render a `:struct` return through the
+  # resource's own public attributes, which never includes `__metadata__`
+  # — an MCP or HTTP caller would never see the requested Version's html.
+  # A plain map's fields are exactly what this action returns.
   defp get_artifact(input, context) do
     artifact_id = input.arguments.artifact_id
 
-    with {:ok, artifact} <- Ash.get(__MODULE__, artifact_id, read_opts(context)) do
+    with {:ok, artifact} <- get_owned_artifact(artifact_id, context) do
       number = Map.get(input.arguments, :version) || artifact.current_version
-      artifact = Ash.Resource.put_metadata(artifact, :version, number)
+
+      metadata = %{
+        id: artifact.id,
+        title: artifact.title,
+        organization_id: artifact.organization_id,
+        current_version: artifact.current_version,
+        archived_at: artifact.archived_at,
+        version: number
+      }
 
       if input.arguments.include_html do
         version = Ash.get!(Version, [artifact_id: artifact_id, number: number], authorize?: false)
-        {:ok, Ash.Resource.put_metadata(artifact, :html, version.html)}
+        {:ok, Map.put(metadata, :html, version.html)}
       else
-        {:ok, artifact}
+        {:ok, metadata}
       end
+    end
+  end
+
+  # The one MCP tool that both creates an Artifact and publishes a new
+  # Version to an existing one (DESIGN.md "Agent interfaces → MCP",
+  # `publish_artifact`): `artifact_id` present selects the publish branch,
+  # absent selects create. Kept as its own generic action, distinct from
+  # the real `create`/`publish` actions each JSON:API route calls
+  # directly, so this composition is MCP-only.
+  defp publish_artifact(input, context) do
+    case Map.get(input.arguments, :artifact_id) do
+      nil ->
+        params = %{
+          title: Map.get(input.arguments, :title),
+          html: input.arguments.html,
+          organization_id: Map.get(input.arguments, :organization_id)
+        }
+
+        __MODULE__
+        |> Ash.Changeset.for_create(:create, params, read_opts(context))
+        |> Ash.create()
+
+      artifact_id ->
+        with {:ok, artifact} <- get_owned_artifact(artifact_id, context) do
+          Artifacts.Publishing.publish(
+            artifact,
+            input.arguments.html,
+            Map.get(input.arguments, :if_version),
+            read_opts(context)
+          )
+        end
     end
   end
 end

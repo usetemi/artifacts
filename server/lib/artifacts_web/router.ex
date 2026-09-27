@@ -49,13 +49,36 @@ defmodule ArtifactsWeb.Router do
 
   scope "/api", ArtifactsWeb do
     pipe_through :api
-    # Slice C fills: the raw-HTML-by-version route (declared before the
-    # forward below), then `forward "/", ArtifactsWeb.JsonApiRouter`.
+
+    # Declared ahead of the forward below so it wins: `Version` is never
+    # its own JSON:API resource type (plan §1). Phoenix's router (unlike
+    # `Plug.Router` directly) refuses a literal suffix after a dynamic
+    # segment, so `:n` here is the whole "<number>.html" segment; the
+    # controller strips the suffix.
+    get "/artifacts/:id/versions/:n", Api.VersionHtmlController, :show
+
+    forward "/", JsonApiRouter
   end
 
   scope "/mcp" do
     pipe_through :mcp
-    # Slice C fills: `forward "/", AshAi.Mcp.Router, tools: [...],
-    # otp_app: :artifacts, mcp_name: "Artifacts MCP Server"`.
+
+    forward "/", AshAi.Mcp.Router,
+      tools: [
+        :list_organizations,
+        :list_artifacts,
+        :get_artifact,
+        :publish_artifact,
+        :get_state,
+        :change_state,
+        :submit,
+        :wait,
+        :history,
+        :rename_artifact,
+        :archive_artifact,
+        :unarchive_artifact
+      ],
+      otp_app: :artifacts,
+      mcp_name: "Artifacts MCP Server"
   end
 end
