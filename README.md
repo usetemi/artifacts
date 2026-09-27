@@ -51,7 +51,7 @@ Submission, act on it, publish the next Version.
 
 ```sh
 cd deploy
-docker compose up -d
+SECRET_KEY_BASE=$(openssl rand -base64 48) TOKEN_SIGNING_SECRET=$(openssl rand -base64 48) docker compose up -d
 ```
 
 or, against a local Postgres 17, from `server/`:

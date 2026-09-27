@@ -17,14 +17,15 @@ services:
 
   app:
     image: ghcr.io/usetemi/artifacts:latest
+    command: ["sh", "-c", "/app/bin/migrate && exec /app/bin/server"]
     environment:
       DATABASE_URL: ecto://artifacts:${POSTGRES_PASSWORD:-artifacts}@postgres/artifacts
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?generate one with `openssl rand -base64 48`}
       TOKEN_SIGNING_SECRET: ${TOKEN_SIGNING_SECRET:?generate one with `openssl rand -base64 48`}
       APP_HOST: localhost
       CONTENT_HOST: 127.0.0.1
-      GOOGLE_CLIENT_ID: replace-with-your-google-oauth-client-id
-      GOOGLE_CLIENT_SECRET: replace-with-your-google-oauth-client-secret
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-replace-with-your-google-oauth-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-replace-with-your-google-oauth-client-secret}
       # Must match the redirect URI registered on the Google OAuth client
       # character for character; defaults to the app origin plus
       # /auth/user/google/callback, so this is that default made explicit

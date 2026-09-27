@@ -39,8 +39,8 @@ SECRET_KEY_BASE=$(openssl rand -base64 48) TOKEN_SIGNING_SECRET=$(openssl rand -
 The app image is `ghcr.io/usetemi/artifacts`, runs migrations on boot,
 and listens on `localhost:4000`. Set the `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` environment variables to a real OAuth client for
-sign-in to work; the rest of the app runs without one. Data lives in the
-`postgres` volume; back that volume up if the history matters to you.
+sign-in to work. Data lives in the `postgres` volume; back that volume up
+if the history matters to you.
 
 `docker compose up -d postgres` alone gives `mix test` and `mix
 phx.server` their database.
@@ -120,6 +120,5 @@ Behavior to expect:
   connections. Pages reconnect on their own and take a fresh state
   snapshot; the reconnect is what starts the Machine.
 - An open page's socket or a running `wait` holds a connection, so
-  either keeps the Machine, and with it the database, awake. Both idle
-  down only once nothing is connected.
+  either keeps the Machine up. It stops only once nothing is connected.
 - MPG's backups hold the record.
