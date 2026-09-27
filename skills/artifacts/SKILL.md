@@ -43,7 +43,7 @@ the arguments the domain model itself pins.
 | Tool | Does |
 | --- | --- |
 | `list_organizations` | The Organizations you can act in. |
-| `list_artifacts` | The open Artifacts in one Organization. |
+| `list_artifacts` | The open Artifacts in one Organization; pass `archived: true` to list archived ones instead. |
 | `get_artifact` | One Artifact's metadata, and, with the tool's include-HTML argument, one Version's HTML. |
 | `publish_artifact` | Create an Artifact (its first Version), or publish a new Version onto one that exists. Naming no Organization publishes to your Personal Organization (a Harness) or your own Organization (an Agent). |
 | `get_state` | The Artifact's reduced State — the JSON object assembled from its rows. |

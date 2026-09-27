@@ -77,9 +77,24 @@ defmodule Artifacts.Publishing.Artifact do
     create :create do
       primary? true
       accept []
-      argument :title, :string, allow_nil?: false, constraints: [min_length: 1]
-      argument :html, :string, allow_nil?: false
-      argument :organization_id, :uuid, allow_nil?: true
+      description "Create a new Artifact and publish its first Version."
+
+      argument :title, :string do
+        allow_nil? false
+        constraints min_length: 1
+        description "The new Artifact's title."
+      end
+
+      argument :html, :string do
+        allow_nil? false
+        description "The page's full HTML for the first Version."
+      end
+
+      argument :organization_id, :uuid do
+        allow_nil? true
+
+        description "The Organization to create the Artifact in. Defaults to the actor's Personal Organization, or an Agent's own Organization."
+      end
 
       change set_attribute(:title, arg(:title))
       change set_attribute(:current_version, 0)
@@ -89,8 +104,19 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :publish do
       accept []
-      argument :html, :string, allow_nil?: false
-      argument :if_version, :integer, allow_nil?: true
+      description "Publish a new Version of the Artifact."
+
+      argument :html, :string do
+        allow_nil? false
+        description "The page's full HTML for the new Version."
+      end
+
+      argument :if_version, :integer do
+        allow_nil? true
+
+        description "Compare-and-set: publish only if the Artifact's current_version still equals this number, else fail with a \"conflict\" error. Omit to publish unconditionally."
+      end
+
       require_atomic? false
 
       validate HtmlSize
@@ -100,7 +126,17 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :change_state do
       accept []
-      argument :ops, {:array, :map}, allow_nil?: false
+
+      description """
+      Apply one or more operations to the Artifact's State in one transaction. State is a JSON object assembled from rows, one per leaf at a dotted path. Each op is {"op": "set", "path": ..., "value": ...} or {"op": "delete", "path": ...}: setting a path replaces every leaf at or below it with the leaves of the new value, and deleting a path removes it and everything below it. Setting a value of null is normalized to a delete. Arrays are one leaf — key items individually (e.g. "items.<id>") to edit them without replacing the whole array. A path is at most 1000 bytes, with no empty segment and no whitespace.
+      """
+
+      argument :ops, {:array, :map} do
+        allow_nil? false
+
+        description "The operations to apply, in order: each is {op: \"set\", path, value} or {op: \"delete\", path}. Within one call, the last write to a given path wins."
+      end
+
       require_atomic? false
 
       change ChangeState
@@ -108,15 +144,48 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :submit do
       accept []
-      argument :payload, Artifacts.Type.JSONValue, allow_nil?: true
+
+      description "Hand the Artifact back with an optional payload, recorded as a Submission a waiting `wait` call can pick up."
+
+      argument :payload, Artifacts.Type.JSONValue do
+        allow_nil? true
+
+        description "Arbitrary JSON to attach to the Submission. Optional; omit for a bare hand-back."
+      end
+
       require_atomic? false
 
       change Submit
     end
 
     read :list do
-      argument :organization_id, :uuid, allow_nil?: false
-      argument :archived, :boolean, allow_nil?: false, default: false
+      description "Open Artifacts in one Organization, most recently updated first. Pass archived: true to list archived ones instead."
+
+      argument :organization_id, :uuid do
+        allow_nil? false
+        description "The Organization to list Artifacts in."
+      end
+
+      argument :archived, :boolean do
+        allow_nil? true
+        default false
+        description "true lists archived Artifacts instead of open ones. Defaults to false."
+      end
+
+      # Unlike a generic action's `Ash.ActionInput` (`wait`, `history`,
+      # `get_artifact`), `Ash.Query`'s own `default:` handling fills only
+      # a wholly omitted argument, never an explicit `null` — and
+      # `^arg(:archived)` below, resolved into a SQL comparison after
+      # preparations run, would fail both its branches under SQL's
+      # three-valued logic and return nothing. This normalizes an
+      # explicit `null` to `false` before the filter runs.
+      prepare fn query, _context ->
+        Ash.Query.set_argument(
+          query,
+          :archived,
+          Ash.Query.get_argument(query, :archived) || false
+        )
+      end
 
       filter expr(
                organization_id == ^arg(:organization_id) and
@@ -129,12 +198,16 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :rename do
       accept [:title]
+      description "Change the Artifact's title."
       require_atomic? false
       validate string_length(:title, min: 1)
     end
 
     update :archive do
       accept []
+
+      description "Close the Artifact: it stays readable, but no further Version, State, or Submission changes can be made until it is unarchived."
+
       require_atomic? false
 
       change fn changeset, _context ->
@@ -147,11 +220,17 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :unarchive do
       accept []
+      description "Reopen an archived Artifact so it accepts content changes again."
       change set_attribute(:archived_at, nil)
     end
 
     action :get_state, :map do
-      argument :artifact_id, :string, allow_nil?: false
+      description "The Artifact's current State, expanded from its stored dotted-path leaves into a nested JSON object."
+
+      argument :artifact_id, :string do
+        allow_nil? false
+        description "The Artifact's id."
+      end
 
       run fn input, context -> get_state(input, context) end
     end
@@ -161,7 +240,7 @@ defmodule Artifacts.Publishing.Artifact do
     # `state:ops` push carry, and `runtime.js`'s `applyOps`/`state.js`
     # algebra operates on. `get_state`'s expanded nested object is for a
     # human or agent reading state through MCP/HTTP, not for reapplying
-    # ops to.
+    # ops to. Not exposed as its own MCP tool or JSON:API route.
     action :get_leaves, :map do
       argument :artifact_id, :string, allow_nil?: false
 
@@ -170,38 +249,118 @@ defmodule Artifacts.Publishing.Artifact do
 
     action :wait, {:array, :struct} do
       constraints items: [instance_of: Artifacts.Publishing.Submission]
-      argument :artifact_id, :string, allow_nil?: false
-      argument :since, :integer, allow_nil?: true
-      argument :timeout, :integer, allow_nil?: false, default: 45_000
+
+      description "Block until a new Submission is made on the Artifact, or until timeout elapses, then return the Submissions made since the given cursor. Call again passing the last Submission id you saw as since."
+
+      argument :artifact_id, :string do
+        allow_nil? false
+        description "The Artifact's id."
+      end
+
+      argument :since, :integer do
+        allow_nil? true
+
+        description "Return Submissions with id greater than this. Omit to wait only for Submissions made after this call started, skipping any that already existed."
+      end
+
+      argument :timeout, :integer do
+        allow_nil? true
+        default 45_000
+
+        description "Milliseconds to block before returning an empty list if nothing arrives. Defaults to 45000; capped at 50000."
+      end
+
       transaction? false
 
       run fn input, context -> wait(input, context) end
     end
 
     action :history, {:array, :map} do
-      argument :artifact_id, :string, allow_nil?: false
-      argument :after, :integer, allow_nil?: false, default: 0
-      argument :limit, :integer, allow_nil?: false, default: 50
-      argument :include_html, :boolean, allow_nil?: false, default: false
+      description "One page of the Artifact's History: its Events (Version published, State changed, Submission made) in id order, after a cursor."
+
+      argument :artifact_id, :string do
+        allow_nil? false
+        description "The Artifact's id."
+      end
+
+      argument :after, :integer do
+        allow_nil? true
+        default 0
+
+        description "Return Events with id greater than this. Defaults to 0, the start of History."
+      end
+
+      argument :limit, :integer do
+        allow_nil? true
+        default 50
+        description "Maximum number of Events to return. Defaults to 50; capped at 200."
+      end
+
+      argument :include_html, :boolean do
+        allow_nil? true
+        default false
+
+        description "For a Version-published Event, include that Version's full HTML in the result. Defaults to false."
+      end
 
       run fn input, context -> history(input, context) end
     end
 
     action :get_artifact, :map do
-      argument :artifact_id, :string, allow_nil?: false
-      argument :version, :integer, allow_nil?: true
-      argument :include_html, :boolean, allow_nil?: false, default: false
+      description "The Artifact's metadata — id, title, Organization, current Version number, and archived status — and, when requested, one Version's HTML."
+
+      argument :artifact_id, :string do
+        allow_nil? false
+        description "The Artifact's id."
+      end
+
+      argument :version, :integer do
+        allow_nil? true
+        description "Which Version to report on. Defaults to the Artifact's current Version."
+      end
+
+      argument :include_html, :boolean do
+        allow_nil? true
+        default false
+        description "Include that Version's HTML in the result. Defaults to false."
+      end
 
       run fn input, context -> get_artifact(input, context) end
     end
 
     action :publish_artifact, :struct do
       constraints instance_of: Artifacts.Publishing.Artifact
-      argument :artifact_id, :string, allow_nil?: true
-      argument :title, :string, allow_nil?: true, constraints: [min_length: 1]
-      argument :html, :string, allow_nil?: false
-      argument :if_version, :integer, allow_nil?: true
-      argument :organization_id, :uuid, allow_nil?: true
+
+      description "Create a new Artifact, or publish a new Version to an existing one. Omit artifact_id to create; pass it to publish a Version onto that Artifact instead."
+
+      argument :artifact_id, :string do
+        allow_nil? true
+
+        description "Omit to create a new Artifact; pass an existing Artifact's id to publish a new Version onto it instead."
+      end
+
+      argument :title, :string do
+        allow_nil? true
+        constraints min_length: 1
+        description "The new Artifact's title. Used only when creating (artifact_id omitted)."
+      end
+
+      argument :html, :string do
+        allow_nil? false
+        description "The page's full HTML for the new Version."
+      end
+
+      argument :if_version, :integer do
+        allow_nil? true
+
+        description "Compare-and-set: publish only if the Artifact's current_version still equals this number, else fail with a \"conflict\" error. Omit to publish unconditionally. Used only when publishing (artifact_id present)."
+      end
+
+      argument :organization_id, :uuid do
+        allow_nil? true
+
+        description "The Organization to create the Artifact in. Used only when creating; defaults to the actor's Personal Organization, or an Agent's own Organization."
+      end
 
       run fn input, context -> publish_artifact(input, context) end
     end
@@ -303,6 +462,10 @@ defmodule Artifacts.Publishing.Artifact do
 
   defp wait(input, context) do
     artifact_id = input.arguments.artifact_id
+    # A generic action's own `default:` applies for an explicit `null`
+    # too, not only a wholly omitted argument (`Ash.ActionInput.
+    # set_defaults/1`, unlike `Ash.Query`'s), so `timeout` is never `nil`
+    # here even though the argument is now optional.
     timeout = min(input.arguments.timeout, 50_000)
 
     with {:ok, _artifact} <- get_owned_artifact(artifact_id, context) do
@@ -364,6 +527,8 @@ defmodule Artifacts.Publishing.Artifact do
 
   defp history(input, context) do
     artifact_id = input.arguments.artifact_id
+    # Same reasoning as `wait`'s `timeout`: `after` and `limit` are never
+    # `nil` here, defaulted or not.
     after_id = input.arguments.after
     limit = min(input.arguments.limit, @max_history_page)
 

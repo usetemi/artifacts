@@ -110,6 +110,58 @@ defmodule ArtifactsWeb.McpRouterTest do
       names = conn |> tools_list(key, session_id) |> Enum.map(& &1["name"]) |> Enum.sort()
       assert names == Enum.sort(@tool_names)
     end
+
+    # Arguments a tool's caller may omit and still get the documented
+    # default (DESIGN.md "Agent interfaces → MCP"): none of these may
+    # appear in that tool's `input.required`, even though each has an
+    # Ash `default:` — `ash_ai` derives "required" from `allow_nil?`,
+    # never from the presence of a default.
+    @optional_by_tool %{
+      "wait" => ~w(timeout),
+      "get_artifact" => ~w(include_html),
+      "history" => ~w(after limit include_html),
+      "list_artifacts" => ~w(archived)
+    }
+
+    # Arguments the tool's caller must always supply, spot-checked
+    # per-tool so a future change can't relax these alongside the
+    # optional ones above.
+    @required_by_tool %{
+      "get_artifact" => ~w(artifact_id),
+      "publish_artifact" => ~w(html),
+      "change_state" => ~w(ops),
+      "list_artifacts" => ~w(organization_id)
+    }
+
+    test "every tool has a real description, and defaulted arguments are optional",
+         %{conn: conn} do
+      %{key: key} = with_harness(conn)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      tools = tools_list(conn, key, session_id)
+      assert length(tools) == length(@tool_names)
+
+      for tool <- tools do
+        description = tool["description"]
+
+        refute description in [nil, ""], "#{tool["name"]} has no description"
+
+        refute description =~ ~r/^Call the \S+ tool$/,
+               "#{tool["name"]} still has ash_ai's default description"
+
+        required = get_in(tool, ["inputSchema", "properties", "input", "required"]) || []
+
+        for optional_arg <- Map.get(@optional_by_tool, tool["name"], []) do
+          refute optional_arg in required,
+                 "#{tool["name"]}.#{optional_arg} should be optional, has a default"
+        end
+
+        for required_arg <- Map.get(@required_by_tool, tool["name"], []) do
+          assert required_arg in required,
+                 "#{tool["name"]}.#{required_arg} should stay required"
+        end
+      end
+    end
   end
 
   describe "authentication" do
@@ -297,6 +349,37 @@ defmodule ArtifactsWeb.McpRouterTest do
       assert [%{"kind" => "version_published"}] = Jason.decode!(tool_text(result))
     end
 
+    test "history with after and limit explicitly null still applies their defaults",
+         %{conn: conn} do
+      %{user: user, key: key} = with_harness(conn)
+      artifact = artifact_fixture!(user)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      result =
+        call_tool(conn, key, session_id, "history", %{
+          "input" => %{"artifact_id" => artifact.id, "after" => nil, "limit" => nil}
+        })
+
+      refute result["isError"]
+      assert [%{"kind" => "version_published"}] = Jason.decode!(tool_text(result))
+    end
+
+    test "wait with timeout explicitly null still returns an existing Submission immediately",
+         %{conn: conn} do
+      %{user: user, key: key} = with_harness(conn)
+      artifact = artifact_fixture!(user)
+      {:ok, _first} = Publishing.submit(artifact, "one", actor: user)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      result =
+        call_tool(conn, key, session_id, "wait", %{
+          "input" => %{"artifact_id" => artifact.id, "since" => 0, "timeout" => nil}
+        })
+
+      refute result["isError"]
+      assert [%{"payload" => "one"}] = Jason.decode!(tool_text(result))
+    end
+
     test "get_artifact returns metadata", %{conn: conn} do
       %{user: user, key: key} = with_harness(conn)
       artifact = artifact_fixture!(user)
@@ -337,6 +420,23 @@ defmodule ArtifactsWeb.McpRouterTest do
       result =
         call_tool(conn, key, session_id, "list_artifacts", %{
           "input" => %{"organization_id" => organization.id}
+        })
+
+      refute result["isError"]
+      assert [%{"id" => id}] = Jason.decode!(tool_text(result))
+      assert id == artifact.id
+    end
+
+    test "list_artifacts with archived explicitly null still lists the open Artifacts",
+         %{conn: conn} do
+      %{user: user, key: key} = with_harness(conn)
+      organization = personal_organization!(user)
+      artifact = artifact_fixture!(user)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      result =
+        call_tool(conn, key, session_id, "list_artifacts", %{
+          "input" => %{"organization_id" => organization.id, "archived" => nil}
         })
 
       refute result["isError"]

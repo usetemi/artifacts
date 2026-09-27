@@ -53,7 +53,9 @@ defmodule Artifacts.Accounts do
   # actor (DESIGN.md "Policies"), so an MCP or HTTP caller could never
   # exercise them — they stay web-only (Slice D).
   tools do
-    tool :list_organizations, Organization, :read
+    tool :list_organizations, Organization, :read,
+      description:
+        "Organizations the actor can act in: every Organization a User is a member of, or (for an Agent) its own Organization."
   end
 
   # DESIGN.md "Agent interfaces → HTTP API": the same actions MCP exposes,
