@@ -12,6 +12,7 @@ defmodule Artifacts.Application do
       Artifacts.Repo,
       {DNSCluster, query: Application.get_env(:artifacts, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Artifacts.PubSub},
+      {AshAuthentication.Supervisor, otp_app: :artifacts},
       ArtifactsWeb.Presence,
       ArtifactsWeb.Endpoint
     ]

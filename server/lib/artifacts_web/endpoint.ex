@@ -15,7 +15,13 @@ defmodule ArtifactsWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  socket "/socket", ArtifactsWeb.ArtifactSocket, websocket: true, longpoll: true
+  # The page socket is declared by slice B, which also adds the
+  # ArtifactsWeb.ArtifactSocket module it points at.
+
+  # Assigns conn.assigns.host_role (:app | :content) before anything else
+  # runs, so every downstream plug and the router's per-pipeline
+  # ArtifactsWeb.Plugs.RequireHost can rely on it.
+  plug ArtifactsWeb.Plugs.HostRole
 
   # Serve at "/" the static files from "priv/static" directory.
   #

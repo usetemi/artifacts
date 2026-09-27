@@ -75,11 +75,25 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  app_host =
+    System.get_env("APP_HOST") ||
+      raise """
+      environment variable APP_HOST is missing.
+      For example: usetemi.art
+      """
+
+  content_host =
+    System.get_env("CONTENT_HOST") ||
+      raise """
+      environment variable CONTENT_HOST is missing.
+      For example: usetemicontent.art
+      """
 
   # The public URL is whatever sits in front of the host: a TLS-terminating
   # proxy on 443 (https, the default) or nothing at all (http), in which
   # case the public port is the listening port. PHX_URL_PORT overrides both.
+  # PHX_SCHEME also overrides the derived https for a plain-http deployment,
+  # e.g. Docker Compose's http://localhost:4000 and http://127.0.0.1:4000.
   scheme = System.get_env("PHX_SCHEME") || "https"
 
   url_port =
@@ -91,8 +105,28 @@ if config_env() == :prod do
 
   config :artifacts, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  config :artifacts,
+    app_host: app_host,
+    content_host: content_host,
+    google_client_id: System.get_env("GOOGLE_CLIENT_ID"),
+    google_client_secret: System.get_env("GOOGLE_CLIENT_SECRET"),
+    google_redirect_uri:
+      System.get_env("GOOGLE_REDIRECT_URI") ||
+        "#{scheme}://#{app_host}/auth/user/google/callback",
+    # Comma-separated; empty or unset means any domain may sign up.
+    signup_email_domains: System.get_env("SIGNUP_EMAIL_DOMAINS", ""),
+    token_signing_secret:
+      System.get_env("TOKEN_SIGNING_SECRET") ||
+        raise("""
+        environment variable TOKEN_SIGNING_SECRET is missing.
+        You can generate one by calling: mix phx.gen.secret
+        """)
+
   config :artifacts, ArtifactsWeb.Endpoint,
-    url: [host: host, port: url_port, scheme: scheme],
+    url: [host: app_host, port: url_port, scheme: scheme],
+    # Both hostnames must resolve here: HostRole assigns the role per
+    # request, so one endpoint serves the app host and the content host.
+    check_origin: ["#{scheme}://#{app_host}", "#{scheme}://#{content_host}"],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.

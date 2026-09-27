@@ -5,7 +5,7 @@ defmodule Artifacts.MixProject do
     [
       app: :artifacts,
       version: "0.1.0",
-      elixir: "~> 1.17",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -62,6 +62,7 @@ defmodule Artifacts.MixProject do
       {:ash_phoenix, "~> 2.3"},
       {:ash_ai, "~> 1.1"},
       {:ash_json_api, "~> 1.7"},
+      {:simple_sat, "~> 0.1"},
       {:igniter, "~> 0.8.4", only: [:dev, :test]},
       {:usage_rules, "~> 1.2", only: [:dev]}
     ]
@@ -87,10 +88,8 @@ defmodule Artifacts.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      setup: ["deps.get", "ash.setup", "run priv/repo/seeds.exs", "assets.setup", "assets.build"],
+      test: ["ash.setup --quiet", "test"],
       "assets.setup": ["esbuild.install --if-missing"],
       "assets.build": ["compile", "esbuild artifacts"],
       "assets.deploy": [

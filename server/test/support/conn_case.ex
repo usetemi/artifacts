@@ -35,4 +35,19 @@ defmodule ArtifactsWeb.ConnCase do
     Artifacts.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Signs a User into the session the way `AshAuthentication.Phoenix.
+  Controller`'s `success/4` does, without going through the Google OAuth2
+  handshake. The User must already carry `__metadata__.token`, i.e. must
+  have been created through `register_with_google` (see
+  `Artifacts.AccountsFixtures.user_fixture/1`), since
+  `require_token_presence_for_authentication?` stores the raw JWT in the
+  session.
+  """
+  def log_in_user(conn, user) do
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> AshAuthentication.Plug.Helpers.store_in_session(user)
+  end
 end

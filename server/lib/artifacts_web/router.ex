@@ -1,53 +1,61 @@
 defmodule ArtifactsWeb.Router do
   use ArtifactsWeb, :router
+  use AshAuthentication.Phoenix.Router
 
   pipeline :browser do
+    plug ArtifactsWeb.Plugs.RequireHost, :app
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
-    plug :put_root_layout, html: {ArtifactsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :load_from_session
   end
 
-  # A published page is a plain document: no session, no CSRF token, no
-  # root layout. The controller sets the CSP for it.
-  pipeline :page do
+  # A published page is a plain document on the content host: no session,
+  # no CSRF token, no root layout. Slice B's page controller sets its own
+  # CSP.
+  pipeline :content do
+    plug ArtifactsWeb.Plugs.RequireHost, :content
     plug :accepts, ["html"]
-    plug :put_secure_browser_headers
   end
 
   pipeline :api do
-    plug :accepts, ["json"]
+    plug ArtifactsWeb.Plugs.RequireHost, :app
+    plug ArtifactsWeb.Plugs.BearerAuth
+    # No `:accepts` here: AshJsonApi.Router negotiates its own content type
+    # (application/vnd.api+json is not a registered Phoenix format), and
+    # the raw-HTML-by-version route needs text/html through this same
+    # pipeline.
+  end
+
+  pipeline :mcp do
+    plug ArtifactsWeb.Plugs.RequireHost, :app
+    plug ArtifactsWeb.Plugs.BearerAuth
   end
 
   scope "/", ArtifactsWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
-    live "/a/:id", ArtifactLive
+    auth_routes(AuthController, Artifacts.Accounts.User)
+    # Slice D fills: the Artifacts/Settings LiveViews, sign_in_route,
+    # sign_out_route.
   end
 
   scope "/", ArtifactsWeb do
-    pipe_through :page
-
-    get "/a/:id/page", PageController, :page
+    pipe_through :content
+    # Slice B fills: `get "/a/:id/page", PageController, :page`.
   end
 
-  scope "/api", ArtifactsWeb.API do
+  scope "/api", ArtifactsWeb do
     pipe_through :api
+    # Slice C fills: the raw-HTML-by-version route (declared before the
+    # forward below), then `forward "/", ArtifactsWeb.JsonApiRouter`.
+  end
 
-    get "/artifacts", ArtifactController, :index
-    post "/artifacts", ArtifactController, :create
-    get "/artifacts/:id", ArtifactController, :show
-    put "/artifacts/:id", ArtifactController, :update
-    post "/artifacts/:id/archive", ArtifactController, :archive
-    get "/artifacts/:id/history", HistoryController, :index
-    get "/artifacts/:id/versions", ArtifactController, :versions
-    get "/artifacts/:id/versions/:number", ArtifactController, :version
-    get "/artifacts/:id/state", StateController, :show
-    post "/artifacts/:id/state", StateController, :update
-    get "/artifacts/:id/submissions", SubmissionController, :index
-    post "/artifacts/:id/submissions", SubmissionController, :create
+  scope "/mcp" do
+    pipe_through :mcp
+    # Slice C fills: `forward "/", AshAi.Mcp.Router, tools: [...],
+    # otp_app: :artifacts, mcp_name: "Artifacts MCP Server"`.
   end
 end

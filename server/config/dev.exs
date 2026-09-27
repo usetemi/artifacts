@@ -1,5 +1,14 @@
 import Config
 
+# Two hostnames on one port: usetemi.art/usetemicontent.art in production,
+# localhost/127.0.0.1 in dev. ArtifactsWeb.Plugs.HostRole reads these.
+config :artifacts,
+  app_host: "localhost",
+  content_host: "127.0.0.1",
+  # Only used by tests/dev that exercise register_with_google directly;
+  # real Google sign-in needs GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI set too.
+  token_signing_secret: "dev_only_signing_secret_do_not_use_in_production_00000"
+
 # Configure your database
 config :artifacts, Artifacts.Repo,
   username: "postgres",
@@ -20,7 +29,9 @@ config :artifacts, ArtifactsWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {127, 0, 0, 1}],
-  check_origin: false,
+  # Both hostnames must be allowed here too, matching runtime.exs, for when
+  # slice B's socket makes this check live.
+  check_origin: ["//localhost", "//127.0.0.1"],
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "MkaQakYjSKm4nW+T61qSmllCD3Ddhcsab9oc6K7vmfjxcEtJTkGDImbCOPIhRxTh",

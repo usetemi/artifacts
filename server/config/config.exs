@@ -9,7 +9,12 @@ import Config
 
 config :artifacts,
   ecto_repos: [Artifacts.Repo],
+  ash_domains: [Artifacts.Accounts],
   generators: [timestamp_type: :utc_datetime]
+
+# Counts unicode codepoints for :string/:ci_string min_length/max_length and
+# the string_length validation, matching how Postgres counts string length.
+config :ash, default_string_length_count: :codepoints
 
 # Configure the endpoint
 config :artifacts, ArtifactsWeb.Endpoint,
