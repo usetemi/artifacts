@@ -9,7 +9,7 @@ import Config
 
 config :artifacts,
   ecto_repos: [Artifacts.Repo],
-  ash_domains: [Artifacts.Accounts],
+  ash_domains: [Artifacts.Accounts, Artifacts.Publishing],
   generators: [timestamp_type: :utc_datetime]
 
 # Counts unicode codepoints for :string/:ci_string min_length/max_length and
