@@ -16,11 +16,11 @@ defmodule Artifacts.PublishingFixtures do
     title = Keyword.get(opts, :title, "Board #{System.unique_integer([:positive])}")
     html = Keyword.get(opts, :html, @html)
 
-    call_opts =
+    extra_params =
       opts
       |> Keyword.take([:organization_id])
-      |> Keyword.put(:actor, actor)
+      |> Map.new()
 
-    Publishing.create_artifact!(title, html, call_opts)
+    Publishing.create_artifact!(title, html, extra_params, actor: actor)
   end
 end
