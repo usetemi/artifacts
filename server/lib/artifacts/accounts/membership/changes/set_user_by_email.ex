@@ -19,7 +19,10 @@ defmodule Artifacts.Accounts.Membership.Changes.SetUserByEmail do
         Ash.Changeset.force_change_attribute(changeset, :user_id, user_id)
 
       {:ok, nil} ->
-        Ash.Changeset.add_error(changeset, field: :email, message: "no user with that email")
+        Ash.Changeset.add_error(changeset,
+          field: :email,
+          message: "No one with that email has signed in to Artifacts yet."
+        )
 
       {:error, error} ->
         Ash.Changeset.add_error(changeset, error)

@@ -11,6 +11,7 @@ defmodule ArtifactsWeb.SettingsLive do
 
   alias Artifacts.Accounts
   alias Artifacts.Accounts.{Harness, Organization}
+  alias Artifacts.Publishing.Errors
 
   @default_expiry_days 365
 
@@ -70,10 +71,10 @@ defmodule ArtifactsWeb.SettingsLive do
 
       <div :if={@revealed_key} id="revealed-key" class="revealed-key">
         <p>
-          <strong>{@revealed_key.name}</strong>'s key — shown once, copy it now:
+          <strong>{@revealed_key.title}</strong>'s key — shown once, copy it now:
         </p>
         <code class="revealed-key-plaintext">{@revealed_key.plaintext}</code>
-        <p>Connect it as a harness:</p>
+        <p>{@revealed_key.connect_line}</p>
         <pre class="revealed-key-command">{@revealed_key.command}</pre>
         <button type="button" class="btn" phx-click="dismiss_key">Dismiss</button>
       </div>
@@ -278,9 +279,11 @@ defmodule ArtifactsWeb.SettingsLive do
            actor: socket.assigns.current_user
          ) do
       {:ok, agent_key} ->
+        agent = find_agent(socket, agent_id)
+
         {:noreply,
          socket
-         |> assign(revealed_key: reveal(agent_key))
+         |> assign(revealed_key: reveal_agent_key(agent_key, agent))
          |> reload_organization()}
 
       {:error, error} ->
@@ -304,7 +307,10 @@ defmodule ArtifactsWeb.SettingsLive do
     case Accounts.create_harness(user.id, name, default_expiry(), actor: user) do
       {:ok, harness} ->
         {:noreply,
-         assign(socket, revealed_key: reveal(harness), harnesses: Ash.read!(Harness, actor: user))}
+         assign(socket,
+           revealed_key: reveal_harness(harness),
+           harnesses: Ash.read!(Harness, actor: user)
+         )}
 
       {:error, error} ->
         {:noreply, put_flash(socket, :error, friendly_error(error))}
@@ -330,6 +336,8 @@ defmodule ArtifactsWeb.SettingsLive do
   defp find_membership(socket, id),
     do: Enum.find(socket.assigns.organization.memberships, &(&1.id == id))
 
+  defp find_agent(socket, id), do: Enum.find(socket.assigns.organization.agents, &(&1.id == id))
+
   defp find_agent_key(socket, id) do
     socket.assigns.organization.agents
     |> Enum.flat_map(& &1.agent_keys)
@@ -340,10 +348,29 @@ defmodule ArtifactsWeb.SettingsLive do
 
   defp default_expiry, do: DateTime.add(DateTime.utc_now(), @default_expiry_days, :day)
 
-  defp reveal(key_or_harness) do
-    plaintext = key_or_harness.__metadata__.plaintext_api_key
+  # An Agent key connects that Agent, not a harness — and an AgentKey's
+  # own `name` is never person-facing (`create_agent_key` always names it
+  # "Key"), so the panel titles itself by the Agent's name instead.
+  defp reveal_agent_key(agent_key, agent) do
+    plaintext = agent_key.__metadata__.plaintext_api_key
 
-    %{name: key_or_harness.name, plaintext: plaintext, command: mcp_command(plaintext)}
+    %{
+      title: agent.name,
+      plaintext: plaintext,
+      connect_line: "Connect an agent as #{agent.name}:",
+      command: mcp_command(plaintext)
+    }
+  end
+
+  defp reveal_harness(harness) do
+    plaintext = harness.__metadata__.plaintext_api_key
+
+    %{
+      title: harness.name,
+      plaintext: plaintext,
+      connect_line: "Connect it as a harness:",
+      command: mcp_command(plaintext)
+    }
   end
 
   defp mcp_command(plaintext_key) do
@@ -353,6 +380,24 @@ defmodule ArtifactsWeb.SettingsLive do
     """
   end
 
-  defp friendly_error(%Ash.Error.Invalid{errors: [first | _]}), do: Exception.message(first)
-  defp friendly_error(error), do: Exception.message(error)
+  # Never `Exception.message/1` (or `inspect/1`) on an Ash error class
+  # wrapper: every Splode-based error, including a field-level one nested
+  # inside `Ash.Error.Invalid`, renders its own bread crumbs ("Bread
+  # Crumbs:\n> Error returned from: ...") into that call's result. Read
+  # the leaf error's own `message` field instead — the plain string this
+  # app (or Ash) set it to — and fall back to `Errors.to_code/1`, the
+  # same stable-code mapping `ArtifactLive.error_message/1` reads, for an
+  # error with no `message` field of its own (`Forbidden`, `Required`).
+  defp friendly_error(%Ash.Error.Invalid{errors: [first | _]}), do: friendly_error(first)
+
+  defp friendly_error(%{message: message}) when is_binary(message) and message != "" do
+    message
+  end
+
+  defp friendly_error(error) do
+    case Errors.to_code(error) do
+      "forbidden" -> "You don't have access to do that."
+      _other -> "Something went wrong."
+    end
+  end
 end

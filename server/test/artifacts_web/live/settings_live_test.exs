@@ -44,7 +44,7 @@ defmodule ArtifactsWeb.SettingsLiveTest do
     refute has_element?(view, "td", "friend@usetemi.com")
   end
 
-  test "adding an unknown email fails with a message", %{conn: conn} do
+  test "adding an unknown email fails with a plain message, not a raw Ash error", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/settings")
 
     html =
@@ -52,7 +52,9 @@ defmodule ArtifactsWeb.SettingsLiveTest do
       |> form("#add-member-form", %{"email" => "nobody@usetemi.com"})
       |> render_submit()
 
-    assert html =~ "no user with that email"
+    assert html =~ "No one with that email has signed in to Artifacts yet."
+    refute html =~ "Bread Crumbs"
+    refute html =~ "Error returned from"
   end
 
   test "leaving is refused as the last member", %{conn: conn, user: user} do
@@ -66,10 +68,13 @@ defmodule ArtifactsWeb.SettingsLiveTest do
              "Leave"
            )
 
-    render_click(view, "leave", %{"id" => membership.id})
+    html = render_click(view, "leave", %{"id" => membership.id})
 
     # Still a member: the organization still shows in the switcher.
     assert has_element?(view, "#membership-#{membership.id}")
+    assert html =~ "cannot remove the organization"
+    assert html =~ "last member"
+    refute html =~ "Bread Crumbs"
   end
 
   test "leaving succeeds when another member remains", %{conn: conn, user: user} do
@@ -99,6 +104,13 @@ defmodule ArtifactsWeb.SettingsLiveTest do
     assert html =~ "claude mcp add"
     assert has_element?(view, "#revealed-key")
 
+    # An Agent key connects that Agent, not a harness: the panel titles
+    # itself by the Agent's name (never the AgentKey's own, always
+    # "Key") and words the connect line accordingly.
+    assert has_element?(view, "#revealed-key strong", "Pidgey")
+    assert html =~ "Connect an agent as Pidgey:"
+    refute html =~ "Connect it as a harness"
+
     view |> element("button", "Revoke") |> render_click()
 
     assert has_element?(view, ".badge", "Revoked")
@@ -115,6 +127,8 @@ defmodule ArtifactsWeb.SettingsLiveTest do
     assert has_element?(view, "li", "Victor's Claude Code")
     assert html =~ "arth_"
     assert has_element?(view, "#revealed-key")
+    assert has_element?(view, "#revealed-key strong", "Victor's Claude Code")
+    assert html =~ "Connect it as a harness:"
 
     view |> element("button", "Dismiss") |> render_click()
     refute has_element?(view, "#revealed-key")
