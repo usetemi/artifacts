@@ -1,97 +1,81 @@
 # Artifacts
 
-A richer interface between people and agents than text. An agent
-publishes a live HTML page to a URL, people and other agents work on it,
-and whoever is waiting gets the page handed back. Works with Claude
-Code, Codex, and any agent that can run a command.
+A persistent, provider-agnostic host for live HTML pages that people and
+coding agents build together. An agent in any harness writes a page for
+the problem in front of it — a board, a form, a dashboard, a spec — and
+publishes it to an Organization. People and other agents open it, change
+it, and hand it back. Every Version, every State change, and every
+Submission is recorded and kept, so how people and agents shape each
+other's work can be studied later.
 
-## When a page beats a thread
+`DOMAIN.md` is the ubiquitous language and the domain rules. `DESIGN.md`
+is how each rule is built: architecture, the Ash resources, the page
+runtime, and the MCP and HTTP interfaces.
 
-A chat thread is fine for a question and an answer. It is a poor place
-to iterate on something, and most collaboration is iteration.
+## Parts
 
-- **Iterating on a visual.** Ten rounds of "black not blue", "one tick
-  per month", "invert it", each answered with a new image file, become
-  one page with those controls on it. People turn the knobs themselves
-  and export the result; the agent is asked only when a change needs
-  new data or new code.
-- **Telling the agent what you know.** When the agent asks "did
-  something happen on this date?", the person annotates the timeline on
-  the page and the agent reads it back, instead of the question sitting
-  unanswered in a thread.
-- **Choosing between variants.** The agent lays out the options side by
-  side on one page; a person picks one, adjusts it, and submits.
-- **Working on the same thing together.** Two people and an agent on
-  one page see each other's changes as they happen, instead of
-  reconciling three replies.
-- **Reading how it got there.** Every version, every edit, and every
-  hand-back is kept in order, so what the agent drafted, what people
-  changed, and what they submitted can be reviewed later.
+- **Web app** — Google sign-in, an Organization's open Artifacts, the
+  page chrome (title, Version, Presence, Submit), and settings — served
+  from the app host.
+- **Page host** — the published HTML plus the runtime script
+  (`window.artifact`), giving a page shared State, Presence, Broadcast,
+  Submit, and Self-Publish — served from a separate content host that
+  holds no sign-in.
+- **MCP and HTTP API** — the same actions for a coding agent: publish a
+  Version, read and change State, submit, wait for a Submission, read
+  the History.
+
+## Signing in
+
+A person signs in with Google. An Instance may restrict sign-up to a set
+of allowed email domains (`SIGNUP_EMAIL_DOMAINS`); sign-up creates the
+User's Personal Organization in the same step.
+
+## Connecting an agent
+
+A Harness — a person's coding tool, such as Claude Code or Codex —
+authenticates with a key that person issued, prefixed `arth_`, and acts
+with that person's rights. An Agent — a coworker such as Pidgey —
+authenticates with its own key, prefixed `arta_`, and acts as itself in
+its Organization. Both connect the same way, over MCP:
 
 ```
-$ artifacts publish triage.html --title "Issue triage"
-{"id":"k7Qm3xVb2pLw9RtY","url":"https://artifacts.example/a/k7Qm3xVb2pLw9RtY","version":1}
-
-$ artifacts wait k7Qm3xVb2pLw9RtY
-{"id":12,"version":1,"viewer_id":"v_8a1f","state":{"cards":{"c1":{"column":"now"}}},"payload":null,...}
+claude mcp add --transport http artifacts https://usetemi.art/mcp \
+  --header "Authorization: Bearer arth_…"
 ```
 
-## Why
+`skills/artifacts/SKILL.md` teaches the loop: publish a page, wait for a
+Submission, act on it, publish the next Version.
 
-Some agent output is better seen than read: a dashboard, a set of
-options to compare, a board to drag things around, a form that needs
-answers before the agent can continue. Hosted artifacts exist inside
-proprietary harnesses, tied to one vendor, one account, and one viewer.
-This is the self-hosted, harness-neutral version.
+## Local development
 
-## What a page gets
+```sh
+cd deploy
+docker compose up -d
+```
 
-Every page is served with `window.artifact`:
+or, against a local Postgres 17, from `server/`:
 
-- **Shared state**: a JSON document synced live to every viewer and to
-  the agent's CLI. `artifact.state.set("cards.c1.column", "done")`.
-- **Presence**: who has the page open, with whatever they share about
-  themselves. `artifact.presence.track({cursor: [x, y]})`.
-- **Broadcast**: ephemeral events between viewers. `artifact.broadcast("pointer", {x, y})`.
-- **Submit**: `artifact.submit(payload)` hands the page back to the
-  waiting agent. The host chrome also has a Submit button, so every
-  page can be submitted.
-- **Self-publish**: `artifact.publish(html)` replaces the page with a
-  new version; every open tab reloads.
+```sh
+mix setup
+mix phx.server
+```
 
-Publishing a new version from the agent updates every open tab in place.
-
-## Everything is kept
-
-Every version, every state edit, and every submission is recorded in
-order and can be read back with `artifacts history <id>`: the agent's
-draft, what the person changed, what they submitted, what the agent
-published next. Nothing is deleted; `artifacts archive <id>` hides a
-page and closes it to edits.
-
-## Install
-
-Server: see `deploy/` for Docker Compose (local development, tests,
-self-hosting) and Fly Machines with Neon. The server is a Phoenix
-application with Postgres; state sync, presence, and broadcast run over
-Phoenix Channels.
-
-CLI: download the `artifacts` binary for your platform from the
-releases page and set `ARTIFACTS_URL` to your server.
-
-Agent skill: `npx skills add usetemi/artifacts` installs `skills/artifacts`
-into Claude Code and Codex, so the agent knows the loop: write a page
-against `window.artifact`, `publish`, `wait`, act on the submission,
-republish. `examples/triage.html` is a complete page to start from.
+See [`deploy/README.md`](deploy/README.md) for the full environment
+variable list and the Fly deployment.
 
 ## Limitations
 
-There is no authentication in this version. Anyone with an artifact's
-URL can view it, change its state, submit, and publish over it. The id
-is the only secret, and there is no gallery page, so links stay
-unlisted. A viewer is a browser, not a person. Pages run same-origin
-with the host. One host process, one Postgres. Full list and rationale
-in [DESIGN.md](DESIGN.md).
+- **Content origin is shared across artifacts.** Every page runs on one
+  content origin, so pages share its localStorage and can read what
+  another page stored there.
+- **A page can exfiltrate what its viewer can see of its own artifact.**
+  The CSP limits connections but allows images from anywhere.
+- **Single node.** PubSub fan-out is in-process; a second node needs a
+  shared PubSub adapter.
+- **Nothing is deleted.** The database only grows.
+
+Full rationale in [`DESIGN.md`](DESIGN.md).
 
 ## License
 
