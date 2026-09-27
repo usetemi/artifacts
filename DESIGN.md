@@ -231,8 +231,9 @@ await artifact.publish(html);          // rejects {code: "conflict"}
 `subscribe` fires once after sync and then per change, coalesced per
 animation frame. Writes reject with `{code: "archived"}` once archived and
 `{code: "unavailable"}` while disconnected. The runtime never touches the
-DOM. The chrome's Submit button calls `submit` with no payload, so every
-page can be handed back.
+DOM. The chrome's Submit control has a multi-line note field and calls
+`submit` with `{note}` when it is filled and no payload otherwise, so
+every page can be handed back, with or without words.
 
 ## Agent interfaces
 
@@ -348,6 +349,25 @@ Configuration is environment variables: `DATABASE_URL`,
 - **Single node.** PubSub fan-out is in-process; a second node needs a
   shared PubSub adapter.
 - **Nothing is deleted.** The database only grows.
+
+## Roadmap
+
+Deferred with the shape it will take when built. None of it is in the
+MVP.
+
+- **Attachments.** A Viewer hands the page or the agent a file, such as
+  a reference sketch of the chart they want. Adds an Attachment on a
+  Submission, file storage, and a way to fetch it from the runtime and
+  MCP.
+- **Element References.** A person points at part of the page, as in
+  "make this smaller" with the figure selected. The chrome gets a pick
+  mode that captures a selector and a short HTML snippet into the
+  Submission payload; the skill teaches the agent to read them.
+- **An in-browser message panel.** Conversation beside the page, with
+  the agent replying in it. Considered for the MVP and deferred: the
+  conversation stays in the harness or the chat tool with the link,
+  and the Submit note carries what a person wants to say to the page's
+  agent.
 
 ## Rejected alternatives
 

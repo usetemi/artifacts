@@ -1,9 +1,32 @@
 # Artifacts
 
-Interactive pages published by coding agents. An agent publishes an
-HTML page to a URL, keeps it updated in place, and blocks until a person
-presses **Submit** on that page. Works with Claude Code, Codex, and any
-agent that can run a command.
+A richer interface between people and agents than text. An agent
+publishes a live HTML page to a URL, people and other agents work on it,
+and whoever is waiting gets the page handed back. Works with Claude
+Code, Codex, and any agent that can run a command.
+
+## When a page beats a thread
+
+A chat thread is fine for a question and an answer. It is a poor place
+to iterate on something, and most collaboration is iteration.
+
+- **Iterating on a visual.** Ten rounds of "black not blue", "one tick
+  per month", "invert it", each answered with a new image file, become
+  one page with those controls on it. People turn the knobs themselves
+  and export the result; the agent is asked only when a change needs
+  new data or new code.
+- **Telling the agent what you know.** When the agent asks "did
+  something happen on this date?", the person annotates the timeline on
+  the page and the agent reads it back, instead of the question sitting
+  unanswered in a thread.
+- **Choosing between variants.** The agent lays out the options side by
+  side on one page; a person picks one, adjusts it, and submits.
+- **Working on the same thing together.** Two people and an agent on
+  one page see each other's changes as they happen, instead of
+  reconciling three replies.
+- **Reading how it got there.** Every version, every edit, and every
+  hand-back is kept in order, so what the agent drafted, what people
+  changed, and what they submitted can be reviewed later.
 
 ```
 $ artifacts publish triage.html --title "Issue triage"

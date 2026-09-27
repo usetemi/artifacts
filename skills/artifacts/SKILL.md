@@ -8,6 +8,33 @@ description: Publish an interactive HTML page to a URL with the `artifacts` CLI,
 One loop: write a page, publish it, wait for the viewer to submit, act on
 the submission, republish. Every command prints one JSON document.
 
+## When to publish a page instead of a file
+
+Publish a page when the person will iterate on the result, choose
+between options, or add what they know. A file (an image, a CSV, a
+block of text) is the right answer only when it is final.
+
+- **Build in the knobs.** If a person is likely to ask for a different
+  color, range, label, sort, or layout, put those controls on the page
+  and let them turn the knobs themselves, exporting from the page when
+  they are done. Route through Submit only what needs new data or new
+  code.
+- **Ask on the page, not in the thread.** When you need something only
+  a person knows (what happened on a date, which item matters, which
+  row is wrong), give them a place on the page to say it, then read it
+  from state or the submission.
+- **Lay variants side by side.** When you would otherwise describe two
+  or three options in prose, render them on one page with a control
+  that submits the pick and any adjustments.
+- **Expect more than one person.** State is shared and live, so design
+  the page so two people and you can act on it at once.
+- **Read the history, not only the submission.** What people changed
+  on the way to Submit is often the feedback.
+
+The chrome's Submit control has a note field. A submission's `payload`
+is `{note}` when a person filled it, so people can say "black not
+blue" without the page building a form.
+
 ## The loop
 
 ```sh
@@ -23,8 +50,9 @@ re-run `wait --since <last id>` to keep waiting), `1` on error.
 
 A submission is `{id, version, viewer_id, state, payload, inserted_at}`:
 `state` is the page's shared state at the moment of Submit, `payload` is
-whatever the page passed to `artifact.submit(payload)` (null from the
-chrome's Submit button).
+whatever the page passed to `artifact.submit(payload)`, or `{note}`
+from the chrome's Submit control when the person wrote a note, else
+null.
 
 Everything that happens to a page is kept. `artifacts history <id>`
 prints it in order, one JSON line per event: each version, each state

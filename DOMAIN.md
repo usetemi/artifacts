@@ -56,7 +56,7 @@ Core modeling themes:
 | **Broadcast** | An ephemeral message from one Viewer's page to the others on the same Artifact. |
 | **Archive** | The only removal: the Artifact leaves the Organization's list and refuses changes, and everything recorded about it stays readable. **Unarchive** reopens it. |
 | **Page Runtime** | The script every page receives, through which it reads and changes State, shares Presence, sends Broadcasts, submits, and Self-Publishes. |
-| **Chrome** | The frame around a page on the Instance's own origin: title, Version, Presence, and the Submit button. |
+| **Chrome** | The frame around a page on the Instance's own origin: title, Version, Presence, and the Submit control, which takes an optional note. |
 | **Content Origin** | The separate web origin where page HTML runs (usetemicontent.art for usetemi.art), holding no sign-in. |
 
 ### 1.3 The record
