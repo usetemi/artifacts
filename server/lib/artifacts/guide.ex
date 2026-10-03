@@ -25,7 +25,7 @@ defmodule Artifacts.Guide do
     The loop:
     1. publish_artifact with the HTML (omit artifact_id to create). Note the id and Version.
     2. Share #{ArtifactsWeb.Origins.app_origin()}/a/<id>.
-    3. wait for a Submission. It blocks up to 50 seconds and returns [] on timeout; call it again with since set to the last Submission id you saw. Never poll.
+    3. wait for a Submission. It blocks up to 40 seconds and returns [] on timeout; call it again with since set to the last Submission id you saw. Never poll.
     4. get_state (and history if the path there matters), act, then publish_artifact again with the artifact_id and if_version set to the Version you last saw.
 
     Every failure is one of: conflict (stale if_version: re-read, fold your change in, retry), archived, not_found, forbidden, quota, invalid. Nothing is deleted; archive_artifact closes an Artifact. Anyone in the Artifact's Organization can view and change it, so put nothing into a page that Organization should not see.

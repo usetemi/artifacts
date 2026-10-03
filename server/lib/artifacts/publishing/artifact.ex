@@ -266,9 +266,9 @@ defmodule Artifacts.Publishing.Artifact do
 
       argument :timeout, :integer do
         allow_nil? true
-        default 45_000
+        default 40_000
 
-        description "Milliseconds to block before returning an empty list if nothing arrives. Defaults to 45000; capped at 50000."
+        description "Milliseconds to block before returning an empty list if nothing arrives. Defaults to 40000; capped at 40000."
       end
 
       transaction? false
@@ -473,7 +473,7 @@ defmodule Artifacts.Publishing.Artifact do
     # too, not only a wholly omitted argument (`Ash.ActionInput.
     # set_defaults/1`, unlike `Ash.Query`'s), so `timeout` is never `nil`
     # here even though the argument is now optional.
-    timeout = min(input.arguments.timeout, 50_000)
+    timeout = min(input.arguments.timeout, 40_000)
 
     with {:ok, _artifact} <- get_owned_artifact(artifact_id, context) do
       topic = "artifact:#{artifact_id}"
