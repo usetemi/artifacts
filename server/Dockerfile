@@ -58,6 +58,10 @@ COPY priv priv
 
 COPY lib lib
 
+# Artifacts.Guide embeds ../skills/artifacts/SKILL.md relative to lib/;
+# the release workflow passes the repo's skills/ as the `skills` context.
+COPY --from=skills artifacts/SKILL.md /skills/artifacts/SKILL.md
+
 # Compile the release
 RUN mix compile
 

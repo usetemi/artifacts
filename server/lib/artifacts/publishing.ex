@@ -9,11 +9,11 @@ defmodule Artifacts.Publishing do
   `create_artifact`, which has none yet. The five generic-action interfaces
   (`get_state`, `get_leaves`, `wait`, `history`, `get_artifact`) take the
   Artifact's id, not the record — a generic action has no record subject
-  (plan §3). `get_state` reduces State to the nested object a human or
-  agent reads through MCP/HTTP; `get_leaves` gives the flat, dotted-path
-  leaves the page channel's join reply and `state:ops` push carry, which
-  is what the browser runtime's state algebra (`assets/js/state.js`)
-  operates on.
+  (plan §3); `get_guide` takes nothing. `get_state` reduces State to the
+  nested object a human or agent reads through MCP/HTTP; `get_leaves`
+  gives the flat, dotted-path leaves the page channel's join reply and
+  `state:ops` push carry, which is what the browser runtime's state
+  algebra (`assets/js/state.js`) operates on.
   """
 
   use Ash.Domain, otp_app: :artifacts, extensions: [AshAi, AshJsonApi.Domain]
@@ -36,6 +36,7 @@ defmodule Artifacts.Publishing do
       define :wait, action: :wait, args: [:artifact_id]
       define :history, action: :history, args: [:artifact_id]
       define :get_artifact, action: :get_artifact, args: [:artifact_id]
+      define :get_guide, action: :get_guide
       define :publish_artifact, action: :publish_artifact, args: [:html]
     end
 
@@ -52,6 +53,7 @@ defmodule Artifacts.Publishing do
   # actions; `get_state`/`wait`/`history`/`get_artifact`/`publish_artifact`
   # are generic actions ash_ai dispatches the same way.
   tools do
+    tool :get_guide, Artifact, :get_guide
     tool :list_artifacts, Artifact, :list
     tool :get_artifact, Artifact, :get_artifact
     tool :publish_artifact, Artifact, :publish_artifact

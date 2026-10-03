@@ -20,6 +20,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: server
+          build-contexts: skills=skills
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}

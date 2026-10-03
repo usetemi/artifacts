@@ -45,7 +45,9 @@ claude mcp add --transport http artifacts https://usetemi.art/mcp \
 ```
 
 `skills/artifacts/SKILL.md` teaches the loop: publish a page, wait for a
-Submission, act on it, publish the next Version.
+Submission, act on it, publish the next Version. The server serves it to
+every connected client (the `get_guide` tool, and a short version in the
+MCP instructions), so nothing needs installing.
 
 ## Local development
 
