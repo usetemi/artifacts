@@ -38,6 +38,28 @@ topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
+// Click (or Enter/Space on) a [data-copy] box to copy its text; the box
+// shows "Copied" for a moment. Delegated from document so boxes that
+// LiveView patches in later work without a hook.
+function copyBox(box) {
+  navigator.clipboard.writeText(box.textContent.trim()).then(() => {
+    box.dataset.copied = ""
+    clearTimeout(box.copiedTimer)
+    box.copiedTimer = setTimeout(() => delete box.dataset.copied, 1500)
+  })
+}
+document.addEventListener("click", e => {
+  const box = e.target.closest("[data-copy]")
+  if (box) copyBox(box)
+})
+document.addEventListener("keydown", e => {
+  const box = e.target.closest?.("[data-copy]")
+  if (box && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault()
+    copyBox(box)
+  }
+})
+
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 

@@ -42,6 +42,7 @@ the arguments the domain model itself pins.
 
 | Tool | Does |
 | --- | --- |
+| `get_guide` | This guide. |
 | `list_organizations` | The Organizations you can act in. |
 | `list_artifacts` | The open Artifacts in one Organization; pass `archived: true` to list archived ones instead. |
 | `get_artifact` | One Artifact's metadata, and, with the tool's include-HTML argument, one Version's HTML. |

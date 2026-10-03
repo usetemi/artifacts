@@ -17,7 +17,7 @@ defmodule ArtifactsWeb.McpRouterTest do
   @mcp_path "/mcp"
 
   @tool_names ~w(
-    list_organizations list_artifacts get_artifact publish_artifact
+    get_guide list_organizations list_artifacts get_artifact publish_artifact
     get_state change_state submit wait history
     rename_artifact archive_artifact unarchive_artifact
   )
@@ -130,7 +130,8 @@ defmodule ArtifactsWeb.McpRouterTest do
       "get_artifact" => ~w(artifact_id),
       "publish_artifact" => ~w(html),
       "change_state" => ~w(ops),
-      "list_artifacts" => ~w(organization_id)
+      "list_artifacts" => ~w(organization_id),
+      "rename_artifact" => ~w(title)
     }
 
     test "every tool has a real description, and defaulted arguments are optional",
@@ -161,6 +162,27 @@ defmodule ArtifactsWeb.McpRouterTest do
                  "#{tool["name"]}.#{required_arg} should stay required"
         end
       end
+    end
+  end
+
+  describe "the guide" do
+    test "initialize carries short instructions that point at get_guide", %{conn: conn} do
+      %{key: key} = with_harness(conn)
+      {init_conn, _session_id} = initialize(conn, key)
+
+      instructions = json_response(init_conn, 200)["result"]["instructions"]
+      assert instructions =~ "get_guide"
+      assert instructions =~ "/a/<id>"
+      assert byte_size(instructions) < 2048
+    end
+
+    test "get_guide returns SKILL.md without its front matter", %{conn: conn} do
+      %{key: key} = with_harness(conn)
+      {_init_conn, session_id} = initialize(conn, key)
+
+      text = conn |> call_tool(key, session_id, "get_guide", %{}) |> tool_text()
+      assert text =~ "## The Page API"
+      refute text =~ ~r/\A---/
     end
   end
 

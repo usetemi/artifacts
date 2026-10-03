@@ -25,7 +25,7 @@ defmodule ArtifactsWeb.SettingsLive do
        organizations: organizations,
        harnesses: Ash.read!(Harness, actor: user),
        revealed_key: nil,
-       page_title: "Settings"
+       page_title: "Settings · Artifacts"
      )}
   end
 
@@ -71,11 +71,23 @@ defmodule ArtifactsWeb.SettingsLive do
 
       <div :if={@revealed_key} id="revealed-key" class="revealed-key">
         <p>
-          <strong>{@revealed_key.title}</strong>'s key — shown once, copy it now:
+          <strong>{@revealed_key.title}</strong>'s key — shown once, click to copy it now:
         </p>
-        <code class="revealed-key-plaintext">{@revealed_key.plaintext}</code>
+        <code
+          class="revealed-key-plaintext copy-box"
+          data-copy
+          role="button"
+          tabindex="0"
+          title="Click to copy"
+        >{@revealed_key.plaintext}</code>
         <p>{@revealed_key.connect_line}</p>
-        <pre class="revealed-key-command">{@revealed_key.command}</pre>
+        <pre
+          class="revealed-key-command copy-box"
+          data-copy
+          role="button"
+          tabindex="0"
+          title="Click to copy"
+        >{@revealed_key.command}</pre>
         <button type="button" class="btn" phx-click="dismiss_key">Dismiss</button>
       </div>
 

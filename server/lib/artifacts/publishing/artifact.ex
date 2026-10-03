@@ -198,6 +198,7 @@ defmodule Artifacts.Publishing.Artifact do
 
     update :rename do
       accept [:title]
+      require_attributes [:title]
       description "Change the Artifact's title."
       require_atomic? false
       validate string_length(:title, min: 1)
@@ -304,6 +305,12 @@ defmodule Artifacts.Publishing.Artifact do
       end
 
       run fn input, context -> history(input, context) end
+    end
+
+    action :get_guide, :string do
+      description "The full guide to using Artifacts: the publish/wait loop, the page API (window.artifact), the page CSP, caps, error codes, and a complete example page. Call once before your first publish_artifact."
+
+      run fn _input, _context -> {:ok, Artifacts.Guide.text()} end
     end
 
     action :get_artifact, :map do

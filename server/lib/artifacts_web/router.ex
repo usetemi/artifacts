@@ -88,6 +88,7 @@ defmodule ArtifactsWeb.Router do
 
     forward "/", AshAi.Mcp.Router,
       tools: [
+        :get_guide,
         :list_organizations,
         :list_artifacts,
         :get_artifact,
@@ -102,6 +103,7 @@ defmodule ArtifactsWeb.Router do
         :unarchive_artifact
       ],
       otp_app: :artifacts,
-      mcp_name: "Artifacts MCP Server"
+      mcp_name: "Artifacts MCP Server",
+      instructions: &Artifacts.Guide.instructions/1
   end
 end

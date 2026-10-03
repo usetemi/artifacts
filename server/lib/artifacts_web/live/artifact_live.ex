@@ -40,7 +40,7 @@ defmodule ArtifactsWeb.ArtifactLive do
            editing_title?: false,
            submitted: nil,
            viewer_names: viewer_names(topic),
-           page_title: artifact.title
+           page_title: "#{artifact.title} · Artifacts"
          )}
 
       {:error, _error} ->
@@ -146,7 +146,11 @@ defmodule ArtifactsWeb.ArtifactLive do
       {:ok, artifact} ->
         {:noreply,
          socket
-         |> assign(artifact: artifact, editing_title?: false, page_title: artifact.title)}
+         |> assign(
+           artifact: artifact,
+           editing_title?: false,
+           page_title: "#{artifact.title} · Artifacts"
+         )}
 
       {:error, error} ->
         {:noreply, put_flash(socket, :error, error_message(error))}

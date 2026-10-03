@@ -238,7 +238,9 @@ the iframe's `contentWindow`, which also only works same-origin.
 
 ### Channel protocol
 
-The join reply carries `{version, state}` (the flat map of rows); Phoenix
+The join reply carries `{version, state}`, `state` being the flat map of
+rows by dotted path (`Publishing.get_leaves`, not `get_state`'s nested
+object); Phoenix
 Presence sends the list right after, keyed by the Viewer's id with
 `{name, meta}`, `meta` starting empty. An archived artifact refuses the
 join.
@@ -307,13 +309,16 @@ HTTP), behind the bearer plug. Each tool is an `Artifact` or
 endpoint keeps its default `allowed_origins`: only `localhost`,
 `127.0.0.1`, and requests with no `Origin` header pass, since Claude Code
 and Codex send none; a browser-based MCP client is out of scope. Its
-`mcp_name` is set explicitly rather than left to derive.
+`mcp_name` is set explicitly rather than left to derive. Its `initialize`
+response carries short `instructions`, under 2 KB: the loop, the error
+codes, and a pointer to `get_guide`.
 
 | Tool | Action |
 | --- | --- |
+| `get_guide` | The agent guide, `skills/artifacts/SKILL.md`. |
 | `list_organizations` | Organizations the actor can act in. |
 | `list_artifacts` | Open artifacts in one Organization. |
-| `get_artifact` | Metadata and, optionally, a Version's HTML. |
+| `get_artifact` | A map of metadata and, optionally, a Version's HTML. |
 | `publish_artifact` | Create, or publish a new Version (`if_version`). |
 | `get_state` / `change_state` | Reduced State; apply ops. |
 | `submit` | Submit with an optional payload. |
@@ -359,6 +364,10 @@ own include-HTML argument.
 `skills/artifacts/SKILL.md` teaches the loop over MCP: when a page beats
 text, how to write one against `window.artifact`, `publish_artifact`,
 `wait` in a loop, act on the Submission, republish, and read `history`.
+The server embeds it at build time, so a connected harness needs no
+install: `get_guide` returns it whole, and the `initialize` instructions
+carry a short version that points there. Copying `skills/artifacts/`
+into a harness's skills directory remains an option.
 
 ## Web app
 

@@ -475,6 +475,33 @@ a {
   word-break: break-all;
 }
 
+.copy-box {
+  position: relative;
+  cursor: copy;
+}
+
+.copy-box:hover {
+  outline: 1px solid var(--accent);
+}
+
+.copy-box:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.copy-box[data-copied]::after {
+  content: "Copied";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}
+
 /* Artifact chrome: owns the whole viewport, no top nav. */
 
 .chrome {
