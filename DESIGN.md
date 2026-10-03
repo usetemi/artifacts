@@ -330,8 +330,10 @@ codes, and a pointer to `get_guide`.
 subscribes to the artifact's topic, reads Submissions with `id > since`,
 and returns them at once or blocks until one arrives or `timeout`
 passes, then returns an empty list. `since` omitted means "after the
-latest submission now". `timeout` defaults to 45 seconds and is capped at
-50, under both harnesses' 60-second default MCP tool timeouts. The agent
+latest submission now". `timeout` is in milliseconds, defaults to 40000,
+and is capped there: a call that lands on a stopped Machine also waits
+out its roughly ten-second start, and the sum stays under both
+harnesses' 60-second default MCP tool timeouts. The agent
 calls again with the last id it saw.
 
 Connecting a harness:

@@ -64,9 +64,10 @@ fold your change onto its current Version, and retry with the new
 **`wait(artifact_id, since, timeout)`.** Returns the Submissions with id
 greater than `since` — omit it to mean "after the latest Submission
 now" — at once if any exist, otherwise it blocks until one arrives or
-`timeout` elapses, then returns an empty list. `timeout` defaults to 45
-seconds and is capped at 50, under both Claude Code's and Codex's
-60-second default MCP tool timeout. Call `wait` again with the id of the
+`timeout` elapses, then returns an empty list. `timeout` is in
+milliseconds; it defaults to 40000 and is capped there, so a call that
+also waits out the server's roughly ten-second cold start stays under
+Claude Code's and Codex's 60-second default MCP tool timeout. Call `wait` again with the id of the
 last Submission you saw as the next `since`, so nothing is missed and
 nothing is read twice.
 
